@@ -1,5 +1,3 @@
--- TODO: optimize code size for Pico-8 syntax
-
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
 --- @class Component integer a singular bit identifying a component
@@ -38,6 +36,7 @@ queries = {}
 
 ---@class Entity
 local pint_mt = {}
+--preserve: pint_mt:*, !pint_mt:move_archetype
 
 function pint_mt:has(component)
     return self.components & component == component
@@ -60,8 +59,13 @@ function swap_remove(t, i)
     return val
 end
 
-function pint_mt:move_archetype(old, new, exclude, include)
-    local row = self.row
+---Changes the archetype of the entity.\
+---This is a low-level operation that is not meant to be used by
+---@param new? Archetype if nil, creates a new archetype
+---@param exclude Component when creating a new archetype with remove, ensures that this component is not added
+---@param include? Component when creating a new archetype with set, add this component to have its value set
+function pint_mt:move_archetype(new, exclude, include)
+    local row, old = self.row, self.archetype
     last(old.entities).row = row
     if new then
         for bit, col in next, old do
@@ -91,15 +95,13 @@ end
 ---@param value? any or nil if `component` is a tag
 ---@return self
 function pint_mt:set(component, value)
-    value = value ~= nil or components[component]
-    local arch, has_value = self.archetype, value ~= nil
+    value = value or components[component]
     if not self:has(component) then
         self.components |= component
-        self:move_archetype(arch, archetypes[self.components], 0, has_value and component)
-        arch = self.archetype
+        self:move_archetype(archetypes[self.components], 0, value and component)
     end
-    if has_value then
-        arch[component][self.row] = value
+    if value then
+        self.archetype[component][self.row] = value
     end
     return self
 end
@@ -114,23 +116,24 @@ function pint_mt:remove(component)
     local old_arch = self.archetype
     -- Xor remove the entity
     self.components ^^= component
-    self:move_archetype(old_arch, archetypes[self.components], component)
+    self:move_archetype(archetypes[self.components], component)
     return self
 end
 
 ---Replaces one component with another.\
 ---This is functionally equivalent to calling `remove` followed by `set`, but saves an archetype move.\
+---This should never be called 
 ---@param component Component the component to replace
 ---@param with Component the component that's replacing the other one
 ---@param value? any the value to replace with. If nil, replaces `with` with the value of `component`.
 ---@return self
 function pint_mt:replace(component, with, value)
     local bitset = self.components
-    if bitset & component == 0 then self[with] = value return end
+    if bitset & component == 0 then return self:set(component, value) end
     value = value or self[component]
     -- Xor remove
     bitset = (bitset ^^ component) | with
-    self:move_archetype(self.archetype, archetypes[bitset], component, with)
+    self:move_archetype(archetypes[bitset], component, with)
     self.components = bitset
     self.archetype[component][self.row] = value
     return self
@@ -138,23 +141,23 @@ end
 
 ---Delete the entity and all its components.
 function pint_mt:delete()
-    self:move_archetype(self.archetype, arch0, 0)
     self.components = 0
+    self:move_archetype(arch0, 0)
 end
 
 ---Creates a new entity
 ---@return Entity
 function entity(arch, bits, values)
-    arch, bits = arch or arch0, bits or 0
+    local e = deli(arch0.entities) or {}
+    local arch = arch or arch0
     -- NOTE: entities could be recycled by using the empty (0) archetype
-    local e = { archetype = arch, components = bits }
     if values then
         for bit, value in next, values do
             arch[bit] = value
         end
     end
     add(arch.entities, e)
-    e.row = #arch.entities
+    e.arch, e.row, e.bits = arch, #arch.entities, bits or 0
     return setmetatable(e, pint_mt)
 end
 
@@ -179,6 +182,8 @@ function copy(value)
     end
     return copied
 end
+
+--preserve: prefab, instantiate, query, system, progress
 
 ---Creates a new prefab. Call `instantiate` on it to spawn a new entity.\
 ---Example: `enemy = prefab(Position, {5, 10}, Sprite, 1, Target, player, Enemy, nil)`
