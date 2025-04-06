@@ -1,9 +1,12 @@
+-- Pintity: a stupid simple ECS for Pico-8
+-- By Morgan.
+
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
 --- @class Component integer a singular bit identifying a component
 --- @class ComponentSet integer bitset of components
 --- @alias System fun(entities: Entity[], ...: any[]) -> bool
---- @alias Query { terms: Component[], bits: integer, [integer]: any[] }
+--- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
 --- @alias Archetype { Component: any[], entities: integer[] }
 --- @class Prefab { Archetype, ComponentSet, { Component: any } }
 
@@ -36,7 +39,7 @@ queries = {}
 
 ---@class Entity
 local pint_mt = {}
---preserve: pint_mt:*, !pint_mt:move_archetype
+--preserve: pint_mt.*, !pint_mt.move_archetype
 
 function pint_mt:has(component)
     return self.components & component == component
@@ -145,9 +148,12 @@ function pint_mt:delete()
     self:move_archetype(arch0, 0)
 end
 
+--preserve: entity, component
+
 ---Creates a new entity
 ---@return Entity
 function entity(arch, bits, values)
+    -- Recycle unused entities
     local e = deli(arch0.entities) or {}
     local arch = arch or arch0
     -- NOTE: entities could be recycled by using the empty (0) archetype
@@ -185,6 +191,51 @@ end
 
 --preserve: prefab, instantiate, query, system, progress
 
+---Queries match entities with specific components.
+---@param terms Component[] the list of components to be queried
+---@param exclude? Component[] a list of components to exclude from the query
+---@return Archetype[] query Every archetype matched with the query
+function query(terms, exclude)
+    local filter = 0
+    for term in all(terms) do filter |= term end
+    local results = { terms = terms, bits = filter }
+    if exclude then
+        filter = 0
+        for excludeTerm in all(exclude) do filter |= excludeTerm end
+        results.exclude = filter
+    end
+    update_query(results, archetypes)
+    return results
+end
+
+---Updates the contents of the query to represent the current state of the ECS.
+---@param query Query
+---@param tables Archetype[]
+function update_query(query, tables)
+    if not query.terms then return end
+    for bits, components in next, tables or new_archetypes do
+        if bits & query.bits == query.bits
+        and bits & query.exclude == 0 then
+            local fields = { components.entities }
+            for term in all(query.terms) do
+                add(fields, components[term])
+            end
+            add(query, fields)
+        end
+    end
+end
+
+--- Create and add a new system.\
+--- Systems are run once per frame, and in the order they are created.\
+--- If a system needs to stop iteration, return `true`.\
+--- Important: if a system needs to delete entities or add new components, it should iterate **in reverse** to prevent entities from being skipped.
+---@param terms Component[]
+---@param callback System
+function system(terms, exclude, callback)
+    add(queries, terms and query(terms, callback and exclude) or {{}}) -- Empty table to ensure iteration
+    add(systems, callback or exclude)
+end
+
 ---Creates a new prefab. Call `instantiate` on it to spawn a new entity.\
 ---Example: `enemy = prefab(Position, {5, 10}, Sprite, 1, Target, player, Enemy, nil)`
 ---@param ... Component|any components and values, or `nil` values for tags
@@ -216,44 +267,6 @@ end
 ---@return Entity instance
 function instantiate(prefab)
     return entity(unpack(prefab))
-end
-
----Queries match entities with specific components.
----@param terms Component[] the list of components to be queried
----@return Archetype[] query Every archetype matched with the query
-function query(terms)
-    local filter = 0
-    for term in all(terms) do filter |= term end
-    local results = { terms = terms, bits = filter }
-    update_query(results, archetypes)
-    return results
-end
-
----Updates the contents of the query to represent the current state of the ECS.
----@param query Query
----@param tables Archetype[]
-function update_query(query, tables)
-    if not query.terms then return end
-    for bits, components in next, tables or new_archetypes do
-        if bits & query.bits == query.bits then
-            local fields = { components.entities }
-            for term in all(query.terms) do
-                add(fields, components[term])
-            end
-            add(query, fields)
-        end
-    end
-end
-
---- Create and add a new system.\
---- Systems are run once per frame, and in the order they are created.\
---- If a system needs to stop iteration, return `true`.\
---- Important: if a system needs to delete entities or add new components, it should iterate **in reverse** to prevent entities from being skipped.
----@param terms Component[]
----@param callback System
-function system(terms, callback)
-    add(queries, terms and query(terms) or {{}}) -- Empty table to ensure iteration
-    add(systems, callback)
 end
 
 ---Progress the ECS each frame. Should be called in `_update`

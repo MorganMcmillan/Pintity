@@ -1,4 +1,5 @@
 -- This is a concept for more complex queries. This likely won't be needed for any Pico-8 game, but can be emulated within systems.
+function orAll(t) local bits = 0 for v in all(t) do bits |= v end return bits end
 
 function complex_query(terms, excludeTerms, optionalTerms, orTerms)
     local results = {}
