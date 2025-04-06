@@ -28,6 +28,9 @@ new_archetypes = archetypes
 --- Pico-8 uses 32-bit fixed point numbers, so `1` is actually bit 16
 component_bit = 1 >> 16
 
+--- @type { Component: any }
+components = {}
+
 --- @type System[]
 --- Systems to be run each frame
 systems = {}
@@ -50,9 +53,10 @@ end
 ---Creates a new component identifier.\
 ---Note: Pintity can only handle creating up to 32 components.
 ---@return Component component
-function component()
+function component(value)
     local b = component_bit
     assert(b ~= 0, "Error: component limit reached. Applications can only have up to 32 components.")
+    components[b] = value
     component_bit <<= 1
     return b
 end
@@ -112,6 +116,7 @@ end
 ---@param component Component
 ---@param value? any or nil if `component` is a tag
 function set(entity, component, value)
+    value = value ~= nil or components[component]
     local arch, has_value = get_type(entity), value ~= nil
     if not has(entity, component) then
         entities[entity] |= component
