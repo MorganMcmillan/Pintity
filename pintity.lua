@@ -1,29 +1,25 @@
 -- TODO: optimize code size for Pico-8 syntax
 
 --- Type definitions:
---- @class Entity integer an increasing id
+--- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
 --- @class Component integer a singular bit identifying a component
 --- @class ComponentSet integer bitset of components
 --- @alias System fun(entities: Entity[], ...: any[]) -> bool
 --- @alias Query { terms: Component[], bits: integer, [integer]: any[] }
 --- @alias Archetype { Component: any[], entities: integer[] }
---- @class Prefab { { Component: any }, Archetype, ComponentSet }
-
----@type { Entity: ComponentSet }
-entities = {}
----@type { Entity: integer }
-entity_rows = {}
+--- @class Prefab { Archetype, ComponentSet, { Component: any } }
 
 arch0 = {entities = {}}
 --- @type { ComponentSet: Archetype }
 archetypes = {[0] = arch0}
 
---- @type { [integer]: Archetype }
+--- @type { ComponentSet: Archetype }
 --- New archetypes created this frame
 --- Prevents system queries from adding archetypes twice by setting it to all archetypes this frame
+--- All archetypes are new on the first frame
 new_archetypes = archetypes
 
---- @type Component
+--- @type Component|integer
 --- The current component ID\
 --- Pico-8 uses 32-bit fixed point numbers, so `1` is actually bit 16
 component_bit = 1 >> 16
@@ -40,42 +36,20 @@ systems = {}
 --- Empty queries represent tasks
 queries = {}
 
----Creates a new entity
----@return Entity
-function entity()
-    -- NOTE: entities could be recycled by using the empty (0) archetype
-    add(entities, 0)
-    add(arch0.entities, #entities)
-    add(entity_rows, #arch0.entities)
-    return #entities
-end
+---@class Entity
+local pint_mt = {}
 
----Creates a new component identifier.\
----Note: Pintity can only handle creating up to 32 components.
----@return Component component
-function component(value)
-    local b = component_bit
-    assert(b ~= 0, "Error: component limit reached. Applications can only have up to 32 components.")
-    components[b] = value
-    component_bit <<= 1
-    return b
-end
-
-function has(entity, component)
-    return entities[entity] & component == component
+function pint_mt:has(component)
+    return self.components & component == component
 end
 
 -- Note: an entity is not considered alive until it has at least one component
-function alive(entity)
-    return entities[entity] ~= 0
+function pint_mt:alive()
+    return self.components ~= 0
 end
 
-function get_type(entity)
-    return archetypes[entities[entity]]
-end
-
-function get(entity, component)
-    return get_type(entity)[component][entity_rows[entity]]
+function pint_mt:__index(component)
+    return components[component] and self.archetype[component][self.row]
 end
 
 function last(t) return t[#t] end
@@ -86,14 +60,14 @@ function swap_remove(t, i)
     return val
 end
 
-function move_archetype(entity, old, new, exclude, include)
-    local row = entity_rows[entity]
-    entity_rows[last(old.entities)] = row
+function pint_mt:move_archetype(old, new, exclude, include)
+    local row = self.row
+    last(old.entities).row = row
     if new then
         for bit, col in next, old do
             add(new[bit], swap_remove(col, row))
         end
-    else
+    else -- Create new archetype and add it
         new = {}
         for bit, col in next, old do
             new[bit] = {swap_remove(col, row)}
@@ -104,64 +78,89 @@ function move_archetype(entity, old, new, exclude, include)
         -- `set`: Ensures the newly set component is included in the archetype
         if include then new[include] = {} end
 
-        archetypes[entities[entity]] = new
-        new_archetypes[entities[entity]] = new
+        archetypes[self.components] = new
+        new_archetypes[self.components] = new
     end
-    entity_rows[entity] = #new.entities
+    self.archetype = new
+    self.row = #new.entities
 end
 
 ---Sets the value of an entity's component.\
 ---Important: a component must not be set to nil, unless it is known to be a tag without any preexisting data.
----@param entity Entity
 ---@param component Component
 ---@param value? any or nil if `component` is a tag
-function set(entity, component, value)
+---@return self
+function pint_mt:set(component, value)
     value = value ~= nil or components[component]
-    local arch, has_value = get_type(entity), value ~= nil
-    if not has(entity, component) then
-        entities[entity] |= component
-        move_archetype(entity, arch, get_type(entity), 0, has_value and component)
-        arch = get_type(entity)
+    local arch, has_value = self.archetype, value ~= nil
+    if not self:has(component) then
+        self.components |= component
+        self:move_archetype(arch, archetypes[self.components], 0, has_value and component)
+        arch = self.archetype
     end
     if has_value then
-        arch[component][entity_rows[entity]] = value
+        arch[component][self.row] = value
     end
+    return self
 end
 
+pint_mt.__newindex = pint_mt.set
+
 ---Removes a component from an entity
----@param entity Entity
 ---@param component Component
-function remove(entity, component)
-    if not has(entity, component) then return end
-    local old_arch = get_type(entity)
+---@return self
+function pint_mt:remove(component)
+    if not self:has(component) then return end
+    local old_arch = self.archetype
     -- Xor remove the entity
-    entities[entity] ^^= component
-    move_archetype(entity, old_arch, get_type(entity), component)
+    self.components ^^= component
+    self:move_archetype(old_arch, archetypes[self.components], component)
+    return self
 end
 
 ---Replaces one component with another.\
 ---This is functionally equivalent to calling `remove` followed by `set`, but saves an archetype move.\
----@param entity Entity
 ---@param component Component the component to replace
 ---@param with Component the component that's replacing the other one
 ---@param value? any the value to replace with. If nil, replaces `with` with the value of `component`.
-function replace(entity, component, with, value)
-    local bitset = entities[entity]
-    if bitset & component == 0 then return set(entity, with, value) end
-    value = value or get(entity, component)
+---@return self
+function pint_mt:replace(component, with, value)
+    local bitset = self.components
+    if bitset & component == 0 then self[with] = value return end
+    value = value or self[component]
     -- Xor remove
-    bitset ^^= component
-    bitset |= with
-    move_archetype(entity, get_type(entity), archetypes[bitset], component)
-    entities[entity] = bitset
-    archetypes[bitset][component][entity_rows[entity]] = value
+    bitset = (bitset ^^ component) | with
+    self:move_archetype(self.archetype, archetypes[bitset], component, with)
+    self.components = bitset
+    self.archetype[component][self.row] = value
+    return self
 end
 
 ---Delete the entity and all its components.
----@param entity Entity
-function delete(entity)
-    move_archetype(entity, get_type(entity), arch0, 0)
-    entities[entity] = 0
+function pint_mt:delete()
+    self:move_archetype(self.archetype, arch0, 0)
+    self.components = 0
+end
+
+---Creates a new entity
+---@return Entity
+function entity()
+    -- NOTE: entities could be recycled by using the empty (0) archetype
+    local e = { archetype = arch0, components = 0 }
+    add(arch0.entities, e)
+    e.row = #arch0.entities
+    return setmetatable(e, pint_mt)
+end
+
+---Creates a new component identifier.\
+---Note: Pintity can only handle creating up to 32 components.
+---@return Component|integer component
+function component(value)
+    local b = component_bit
+    assert(b ~= 0, "Error: component limit reached. Applications can only have up to 32 components.")
+    components[b] = value
+    component_bit <<= 1
+    return b
 end
 
 ---Performs a shallow copy of a table or other value
@@ -182,10 +181,10 @@ end
 function prefab(...)
     local components, bits = {}, 0
     for i = 1, select("#", ...), 2 do
-        local component, value = select(i, ...), select(i + 1, ...)
+        local component = select(i, ...)
         bits |= component
         -- Tags are ignored as `add(table, nil)` has the same behavior as `add(nil, value)`.
-        components[component] = copy(value)
+        components[component] = copy(select(i + 1, ...))
     end
 
     -- Premake archetype if needed.
@@ -198,21 +197,21 @@ function prefab(...)
     archetypes[bits] = archetype
     end
 
-    return { components, archetype, bits }
+    return { archetype, bits, components }
 end
 
 ---Instantiates a new entity from a prefab created by `prefab`.
 ---@param prefab Prefab
 ---@return Entity instance
 function instantiate(prefab)
-    local archetype = prefab[2]
-    for component, value in next, prefab[1] do
+    local archetype = prefab[1]
+    for component, value in next, prefab[3] do
         add(archetype[component], value)
     end
-    add(entities, prefab[3])
-    add(archetype.entities, #entities)
-    add(entity_rows, #archetype.entities)
-    return #entities
+    local e = { archetype = archetype, components = prefab[2] }
+    add(archetype.entities, e)
+    e.row = #archetype.entities
+    return setmetatable(e, pint_mt)
 end
 
 ---Queries match entities with specific components.
@@ -261,10 +260,11 @@ function progress()
         new_archetypes = {}
     end
     for i, query in inext, queries do
+        local system = systems[i]
         -- Note: empty tables are never deleted, so we don't exclude them from our queries
         for cols in all(query) do
             -- Skip system if it returns true
-            if systems[i](unpack(cols)) then break end
+            if system(unpack(cols)) then break end
         end
     end
 end
