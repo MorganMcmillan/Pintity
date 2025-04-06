@@ -20,7 +20,7 @@ archetypes = {[0] = arch0}
 --- All archetypes are new on the first frame
 new_archetypes = archetypes
 
---- @type Component|integer
+--- @type Component
 --- The current component ID\
 --- Pico-8 uses 32-bit fixed point numbers, so `1` is actually bit 16
 component_bit = 1 >> 16
@@ -169,8 +169,9 @@ end
 
 ---Creates a new component identifier.\
 ---Note: Pintity can only handle creating up to 32 components.
----@return Component|integer component
+---@return Component component
 function component(value)
+    --@type Component
     local b = component_bit
     assert(b ~= 0, "Error: component limit reached. Applications can only have up to 32 components.")
     components[b] = value
@@ -232,7 +233,7 @@ end
 ---@param terms Component[]
 ---@param callback System
 function system(terms, exclude, callback)
-    add(queries, terms and query(terms, callback and exclude) or {{}}) -- Empty table to ensure iteration
+    add(queries, terms and query(terms, callback and exclude) or {{0}}) -- Empty table to ensure iteration
     add(systems, callback or exclude)
 end
 
@@ -278,10 +279,13 @@ function progress()
     end
     for i, query in inext, queries do
         local system = systems[i]
-        -- Note: empty tables are never deleted, so we don't exclude them from our queries
         for cols in all(query) do
-            -- Skip system if it returns true
-            if system(unpack(cols)) then break end
+            -- Note: empty tables are never deleted, so they aren't removed from queries
+            -- Skip empty archetypes
+            if #cols[1] ~= 0 then
+                -- Skip system if it returns true
+                if system(unpack(cols)) then break end
+            end
         end
     end
 end
