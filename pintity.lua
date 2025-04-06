@@ -144,11 +144,17 @@ end
 
 ---Creates a new entity
 ---@return Entity
-function entity()
+function entity(arch, bits, values)
+    arch, bits = arch or arch0, bits or 0
     -- NOTE: entities could be recycled by using the empty (0) archetype
-    local e = { archetype = arch0, components = 0 }
-    add(arch0.entities, e)
-    e.row = #arch0.entities
+    local e = { archetype = arch, components = bits }
+    if values then
+        for bit, value in next, values do
+            arch[bit] = value
+        end
+    end
+    add(arch.entities, e)
+    e.row = #arch.entities
     return setmetatable(e, pint_mt)
 end
 
@@ -204,14 +210,7 @@ end
 ---@param prefab Prefab
 ---@return Entity instance
 function instantiate(prefab)
-    local archetype = prefab[1]
-    for component, value in next, prefab[3] do
-        add(archetype[component], value)
-    end
-    local e = { archetype = archetype, components = prefab[2] }
-    add(archetype.entities, e)
-    e.row = #archetype.entities
-    return setmetatable(e, pint_mt)
+    return entity(unpack(prefab))
 end
 
 ---Queries match entities with specific components.
