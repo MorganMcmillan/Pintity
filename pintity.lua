@@ -3,7 +3,7 @@
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
---- @class Component integer a singular bit identifying a component
+--- @alias Component integer a singular bit identifying a component
 --- @class ComponentSet integer bitset of components
 --- @alias System fun(entities: Entity[], ...: any[]) -> bool
 --- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
@@ -17,8 +17,7 @@ archetypes = {[0] = arch0}
 --- @type { ComponentSet: Archetype }
 --- New archetypes created this frame
 --- Prevents system queries from adding archetypes twice by setting it to all archetypes this frame
---- All archetypes are new on the first frame
-new_archetypes = archetypes
+new_archetypes = {}
 
 --- @type Component
 --- The current component ID\
@@ -39,6 +38,7 @@ queries = {}
 
 ---@class Entity
 local pint_mt = {}
+pint_mt.__index = pint_mt
 --preserve: pint_mt.*, !pint_mt.move_archetype
 
 function pint_mt:has(component)
@@ -50,17 +50,21 @@ function pint_mt:alive()
     return self.components ~= 0
 end
 
-function pint_mt:__index(component)
-    return components[component] and self.archetype[component][self.row]
+function pint_mt:get(component)
+    local col = self.archetype[component]
+    return col and col[self.row]
 end
 
 function last(t) return t[#t] end
 
 function swap_remove(t, i)
     local val = t[i]
-    t[i], t[#t] = last(t) --, nil
+    if #t > 1 then t[i] = last(t) end
+    t[#t] = nil
     return val
 end
+
+-- TODO: prevent tables from randomly removing components
 
 ---Changes the archetype of the entity.\
 ---This is a low-level operation that is not meant to be used by
@@ -69,6 +73,8 @@ end
 ---@param include? Component when creating a new archetype with set, add this component to have its value set
 function pint_mt:move_archetype(new, exclude, include)
     local row, old = self.row, self.archetype
+    if old == new then return end
+    printh("Row currently is: "..row)
     last(old.entities).row = row
     if new then
         for bit, col in next, old do
@@ -77,7 +83,9 @@ function pint_mt:move_archetype(new, exclude, include)
     else -- Create new archetype and add it
         new = {}
         for bit, col in next, old do
+            -- printh("Swap removing col of len: "..#col)
             new[bit] = {swap_remove(col, row)}
+            -- printh("Col is now len: "..#col)
         end
 
         -- `remove`: Remove falsely added component
@@ -115,11 +123,11 @@ pint_mt.__newindex = pint_mt.set
 ---@param component Component
 ---@return self
 function pint_mt:remove(component)
-    if not self:has(component) then return end
-    local old_arch = self.archetype
-    -- Xor remove the entity
-    self.components ^^= component
-    self:move_archetype(archetypes[self.components], component)
+    if self:has(component) then
+        -- Xor remove the entity
+        self.components ^^= component
+        self:move_archetype(archetypes[self.components], component)
+    end
     return self
 end
 
@@ -133,12 +141,12 @@ end
 function pint_mt:replace(component, with, value)
     local bitset = self.components
     if bitset & component == 0 then return self:set(component, value) end
-    value = value or self[component]
+    value = value or self:get(component)
     -- Xor remove
     bitset = (bitset ^^ component) | with
     self:move_archetype(archetypes[bitset], component, with)
     self.components = bitset
-    self.archetype[component][self.row] = value
+    self.archetype[with][self.row] = value
     return self
 end
 
@@ -155,7 +163,7 @@ end
 function entity(arch, bits, values)
     -- Recycle unused entities
     local e = deli(arch0.entities) or {}
-    local arch = arch or arch0
+    arch = arch or arch0
     -- NOTE: entities could be recycled by using the empty (0) archetype
     if values then
         for bit, value in next, values do
@@ -163,7 +171,7 @@ function entity(arch, bits, values)
         end
     end
     add(arch.entities, e)
-    e.arch, e.row, e.bits = arch, #arch.entities, bits or 0
+    e.archetype, e.row, e.components = arch, #arch.entities, bits or 0
     return setmetatable(e, pint_mt)
 end
 
@@ -171,7 +179,7 @@ end
 ---Note: Pintity can only handle creating up to 32 components.
 ---@return Component component
 function component(value)
-    --@type Component
+    ---@type Component
     local b = component_bit
     assert(b ~= 0, "Error: component limit reached. Applications can only have up to 32 components.")
     components[b] = value
@@ -199,7 +207,7 @@ end
 function query(terms, exclude)
     local filter = 0
     for term in all(terms) do filter |= term end
-    local results = { terms = terms, bits = filter }
+    local results = { terms = terms, bits = filter, exclude = 0 }
     if exclude then
         filter = 0
         for excludeTerm in all(exclude) do filter |= excludeTerm end
@@ -214,12 +222,15 @@ end
 ---@param tables Archetype[]
 function update_query(query, tables)
     if not query.terms then return end
-    for bits, components in next, tables or new_archetypes do
+    for bits, archetype in next, tables or new_archetypes do
         if bits & query.bits == query.bits
         and bits & query.exclude == 0 then
-            local fields = { components.entities }
+            local fields = { archetype.entities }
             for term in all(query.terms) do
-                add(fields, components[term])
+                if not archetype[term] then
+                    printh("Missing term! ".. (term << 16))
+                end
+                add(fields, archetype[term])
             end
             add(query, fields)
         end
@@ -231,7 +242,8 @@ end
 --- If a system needs to stop iteration, return `true`.\
 --- Important: if a system needs to delete entities or add new components, it should iterate **in reverse** to prevent entities from being skipped.
 ---@param terms Component[]
----@param callback System
+---@param exclude Component[]|System
+---@param callback? System
 function system(terms, exclude, callback)
     add(queries, terms and query(terms, callback and exclude) or {{0}}) -- Empty table to ensure iteration
     add(systems, callback or exclude)
@@ -272,12 +284,13 @@ end
 
 ---Progress the ECS each frame. Should be called in `_update`
 function progress()
-    if new_archetypes ~= archetypes and #new_archetypes > 0 then
+    if next(new_archetypes) then
         foreach(queries, update_query)
         -- The archetypes are no longer new this frame
         new_archetypes = {}
     end
     for i, query in inext, queries do
+        print(#query)
         local system = systems[i]
         for cols in all(query) do
             -- Note: empty tables are never deleted, so they aren't removed from queries
