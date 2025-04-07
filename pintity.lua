@@ -261,37 +261,27 @@ end
 ---@param ... Component|any components and values, or `nil` values for tags
 ---@return Prefab prefab
 local function prefab(...)
-    local components, bits = {}, 0
-    for i = 1, select("#", ...), 2 do
-        local component = select(i, ...)
-        bits |= component
+    local components, args = { bits = 0 }, {...}
+    for i = 1, #args, 2 do
+        local component = args[i]
+        components.bits |= component
         -- Tags are ignored as `add(table, nil)` has the same behavior as `add(nil, value)`.
-        components[component] = copy(select(i + 1, ...))
+        components[component] = copy(args[i+1])
     end
-
-    -- Premake archetype if needed.
-    local archetype = archetypes[bits]
-    if not archetype then
-        archetype = { entities = {} }
-        for component in next, components do
-            archetype[component] = {}
-        end
-    archetypes[bits] = archetype
-    end
-
-    return { archetype, bits, components }
+    return components
 end
 
 ---Instantiates a new entity from a prefab created by `prefab`.
 ---@param prefab Prefab
 ---@return Entity instance
 function instantiate(prefab)
-    local new, components, values = unpack(prefab)
-    -- The archetype was already created by `prefab`
-    for bit, value in next, values do
-        add(new[bit], value)
+    local e = entity()
+    -- Saves several archetype moves
+    local new = e:set(prefabs.bits).archetype
+    for bit, value in next, prefab do
+        e:rawset(bit, value)
     end
-    return entity():set(components)
+    return e
 end
 
 ---Progress the ECS each frame. Should be called in `_update`
