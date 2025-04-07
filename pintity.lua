@@ -1,3 +1,56 @@
+-- TODO: remove this
+-- pancelor's pq-debugging
+
+-- quote all args and print to host console
+-- usage:
+--   pq("handles nils", many_vars, {tables=1, work=11, too=111})
+function pq(...)
+    printh(qq(...))
+    return ...
+  end
+  
+  -- quote all arguments into a string
+  -- usage:
+  --   x=2 y=3 ?qq("x=",x,"y=",y)
+  function qq(...)
+    local s,args="",pack(...)
+    for i=1,args.n do
+      s..=quote(args[i]).." "
+    end
+    return s
+  end
+  
+  -- quote a single thing
+  -- like tostr() but for tables
+  -- don't call this directly; call pq or qq instead
+  function quote(t, depth)
+    depth=depth or 4 --avoid inf loop
+    if type(t)~="table" or depth<=0 then return tostr(t) end
+  
+    local s="{"
+    for k,v in pairs(t) do
+      s..=tostr(k).."="..quote(v,depth-1)..",\n"
+    end
+    return s.."}"
+  end
+  
+  -- like sprintf (from c)
+  -- usage:
+  --   ?qf("%/% is %%",3,8,3/8*100,"%")
+  function qf(fmt,...)
+    local parts,args=split(fmt,"%"),pack(...)
+    local str=deli(parts,1)
+    for ix,pt in ipairs(parts) do
+      str..=quote(args[ix])..pt
+    end
+    if args.n~=#parts then
+      -- uh oh! mismatched arg count
+      str..="(extraqf:"..(args.n-#parts)..")"
+    end
+    return str
+  end
+  function pqf(...) printh(qf(...)) end
+
 -- Pintity: a stupid simple ECS for Pico-8
 -- By Morgan.
 
@@ -74,7 +127,6 @@ end
 function pint_mt:move_archetype(new, exclude, include)
     local row, old = self.row, self.archetype
     if old == new then return end
-    printh("Row currently is: "..row)
     last(old.entities).row = row
     if new then
         for bit, col in next, old do
@@ -133,19 +185,18 @@ end
 
 ---Replaces one component with another.\
 ---This is functionally equivalent to calling `remove` followed by `set`, but saves an archetype move.\
----This should never be called 
+---This should never be called with tags.
 ---@param component Component the component to replace
 ---@param with Component the component that's replacing the other one
 ---@param value? any the value to replace with. If nil, replaces `with` with the value of `component`.
 ---@return self
 function pint_mt:replace(component, with, value)
-    local bitset = self.components
-    if bitset & component == 0 then return self:set(component, value) end
+    if not self:has(component) then return self:set(component, value) end
     value = value or self:get(component)
     -- Xor remove
-    bitset = (bitset ^^ component) | with
-    self:move_archetype(archetypes[bitset], component, with)
+    self.components += with - component
     self.components = bitset
+    self:move_archetype(archetypes[bitset], component, with)
     self.archetype[with][self.row] = value
     return self
 end
@@ -290,7 +341,6 @@ function progress()
         new_archetypes = {}
     end
     for i, query in inext, queries do
-        print(#query)
         local system = systems[i]
         for cols in all(query) do
             -- Note: empty tables are never deleted, so they aren't removed from queries
