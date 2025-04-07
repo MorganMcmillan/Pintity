@@ -59,7 +59,7 @@ function last(t) return t[#t] end
 
 function swap_remove(t, i)
     local val = t[i]
-    if #t > 1 then t[i] = last(t) end
+    if t[2] then t[i] = last(t) end
     t[#t] = nil
     return val
 end
@@ -105,7 +105,7 @@ end
 ---@return self
 function pint_mt:set(component, value)
     value = value or components[component]
-    if self.components & component == 0 then
+    if self.components & component ~= component then
         self.components |= component
         self:update_archetype(0, value and component)
     end
@@ -157,18 +157,12 @@ end
 
 ---Creates a new entity
 ---@return Entity
-function entity(arch, bits, values)
+function entity()
     -- Recycle unused entities
-    local e = deli(arch0.entities) or {}
-    arch = arch or arch0
-    if values then
-        for bit, value in next, values do
-            arch[bit] = value
-        end
-    end
-    add(arch.entities, e)
-    e.archetype, e.row, e.components = arch, #arch.entities, bits or 0
-    return setmetatable(e, pint_mt)
+    return last(arch0.entities) or setmetatable(
+        add(arch0.entities, { archetype = arch0, components = 0, row = 1 }),
+        pint_mt
+    )
 end
 
 ---Performs a shallow copy of a table or other value
@@ -273,7 +267,13 @@ end
 ---@param prefab Prefab
 ---@return Entity instance
 function instantiate(prefab)
-    return entity(unpack(prefab))
+    local e, new, components, values = entity(), unpack(prefab)
+    e.components = components
+    e:update_archetype(0)
+    for bit, value in next, values do
+        add(new[bit], value)
+    end
+    return e
 end
 
 ---Progress the ECS each frame. Should be called in `_update`
