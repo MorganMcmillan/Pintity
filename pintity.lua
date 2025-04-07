@@ -41,22 +41,40 @@ local pint_mt = {}
 pint_mt.__index = pint_mt
 --preserve: pint_mt.*, !pint_mt.update_archetype
 
+---Checks if the entity has a component or set of components
+---@param component Component|ComponentSet
+---@return boolean
 function pint_mt:has(component)
     return self.components & component == component
 end
 
--- Note: an entity is not considered alive until it has at least one component
+---Checks if the entity is alive.\
+---Note: an entity is not considered alive until it has at least one component
+---@return boolean
 function pint_mt:alive()
     return self.components ~= 0
 end
 
+---Returns the value of this entity's component, or nil if it doesn't have it
+---@param component Component
+---@return any|nil
 function pint_mt:get(component)
     local col = self.archetype[component]
     return col and col[self.row]
 end
 
+---Sets the component's value, but without checking that it exists.\
+---This should only be used if the entity is known to have the component
+---@param component Component
+---@param value any
+function pint_mt:rawset(component, value)
+    self.archetype[component][self.row] = value
+end
+
+-- Returns the last item of the table
 function last(t) return t[#t] end
 
+-- Removes the item at i and swaps its value with the last value
 function swap_remove(t, i)
     local val = t[i]
     if t[2] then t[i] = last(t) end
@@ -66,7 +84,6 @@ end
 
 ---Changes the archetype of the entity.\
 ---This is a low-level operation that is not meant to be used directly. Instead use `set`, `remove` or `replace`
----@param new? Archetype if nil, creates a new archetype
 ---@param exclude Component when creating a new archetype with remove, ensures that this component is not added
 ---@param include? Component when creating a new archetype with set, add this component to have its value set
 function pint_mt:update_archetype(exclude, include)
@@ -106,11 +123,12 @@ end
 function pint_mt:set(component, value)
     value = value or copy(components[component])
     if self.components & component ~= component then
+        -- Add the component with bitwise or
         self.components |= component
         self:update_archetype(0, value and component)
     end
     if value then
-        self.archetype[component][self.row] = value
+        self:rawset(component, value)
     end
     return self
 end
@@ -140,10 +158,10 @@ function pint_mt:replace(component, with, value)
     -- Prevents column from being emptied or entity having `component` ADDED
     if self.components & component == 0 then return self:set(with, value) end
     value = value or self:get(component)
-    -- Xor remove
+    -- Xor remove, or add
     self.components = self.components ^^ component | with
     self:update_archetype(component, with)
-    self.archetype[with][self.row] = value
+    self:rawset(component, value)
     return self
 end
 
@@ -160,6 +178,7 @@ end
 function entity()
     -- Recycle unused entities
     return last(arch0.entities) or setmetatable(
+        -- Row is known to be 1, as arch0 is empty
         add(arch0.entities, { archetype = arch0, components = 0, row = 1 }),
         pint_mt
     )
@@ -268,6 +287,7 @@ end
 ---@return Entity instance
 function instantiate(prefab)
     local new, components, values = unpack(prefab)
+    -- The archetype was already created by `prefab`
     for bit, value in next, values do
         add(new[bit], value)
     end
