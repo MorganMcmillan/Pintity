@@ -267,13 +267,11 @@ end
 ---@param prefab Prefab
 ---@return Entity instance
 function instantiate(prefab)
-    local e, new, components, values = entity(), unpack(prefab)
-    e.components = components
-    e:update_archetype(0)
+    local new, components, values = unpack(prefab)
     for bit, value in next, values do
         add(new[bit], value)
     end
-    return e
+    return entity():set(components)
 end
 
 ---Progress the ECS each frame. Should be called in `_update`
