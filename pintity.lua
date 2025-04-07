@@ -104,7 +104,7 @@ end
 ---@param value? any
 ---@return self
 function pint_mt:set(component, value)
-    value = value or components[component]
+    value = value or copy(components[component])
     if self.components & component ~= component then
         self.components |= component
         self:update_archetype(0, value and component)
@@ -183,7 +183,7 @@ function component(value)
     ---@type Component
     local b = component_bit
     assert(b ~= 0, "Error: component limit reached. Applications can only have up to 32 components.")
-    components[b] = copy(value)
+    components[b] = value
     component_bit <<= 1
     return b
 end
