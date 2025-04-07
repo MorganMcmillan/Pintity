@@ -105,7 +105,7 @@ end
 ---@return self
 function pint_mt:set(component, value)
     value = value or components[component]
-    if not self:has(component) then
+    if self.components & component == 0 then
         self.components |= component
         self:update_archetype(0, value and component)
     end
@@ -138,7 +138,7 @@ end
 ---@return self
 function pint_mt:replace(component, with, value)
     -- Prevents column from being emptied or entity having `component` ADDED
-    if self.components & component == 0 then return self:set(component, value) end
+    if self.components & component == 0 then return self:set(with, value) end
     value = value or self:get(component)
     -- Xor remove
     self.components = self.components ^^ component | with
