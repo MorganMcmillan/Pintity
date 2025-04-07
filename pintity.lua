@@ -137,12 +137,11 @@ end
 ---@param value? any the value to replace with. If nil, replaces `with` with the value of `component`.
 ---@return self
 function pint_mt:replace(component, with, value)
-    local bitset = self.components
     -- Prevents column from being emptied or entity having `component` ADDED
-    if bitset & component == 0 then return self:set(component, value) end
+    if self.components & component == 0 then return self:set(component, value) end
     value = value or self:get(component)
     -- Xor remove
-    self.components = bitset ^^ component | with
+    self.components = self.components ^^ component | with
     self:update_archetype(component, with)
     self.archetype[with][self.row] = value
     return self
