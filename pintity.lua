@@ -142,9 +142,7 @@ function pint_mt:replace(component, with, value)
     if bitset & component == 0 then return self:set(component, value) end
     value = value or self:get(component)
     -- Xor remove
-    bitset ^^= component
-    bitset |= with
-    self.components = bitset
+    self.components = bitset ^^ component | with
     self:update_archetype(component, with)
     self.archetype[with][self.row] = value
     return self
@@ -240,9 +238,10 @@ end
 ---@param terms Component[]
 ---@param exclude Component[]|System
 ---@param callback? System
+---@return System callback
 local function system(terms, exclude, callback)
     add(queries, terms and query(terms, callback and exclude) or {{0}}) -- Empty table to ensure iteration
-    add(systems, callback or exclude)
+    return add(systems, callback or exclude)
 end
 
 ---Creates a new prefab. Call `instantiate` on it to spawn a new entity.\
