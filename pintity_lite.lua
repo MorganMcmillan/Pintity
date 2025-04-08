@@ -137,32 +137,30 @@ function Entity:set(component, value)
     return self
 end
 
----Removes a component from an entity.
+---Removes a component from an entity.\
+---UNSAFE: entity MUST have component
 ---@param component Component
 ---@return self
 function Entity:remove(component)
-    if self:has(component) then
-        -- Xor remove the entity
-        self.components ^^= component
-        self:update_archetype(component)
-    end
+    self.components ^^= component
+    self:update_archetype(component)
     return self
 end
 
 ---Replaces one component with another.\
 ---This is functionally equivalent to calling `remove` followed by `set`, but saves an archetype move.\
----This should never be called with tags.
+---This should never be called with tags.\
+---UNSAFE: entity MUST have component
 ---@param component Component the component to replace
 ---@param with Component the component that's replacing the other one
 ---@param value? any the value to replace with. If nil, replaces `with` with the value of `component`.
 ---@return self
 function Entity:replace(component, with, value)
-    -- Prevents column from being emptied or entity having `component` ADDED
-    if self.components & component == 0 then return self:set(with, value) end
+    value = value or self:get(component)
     -- Xor remove, or add
     self.components = self.components ^^ component | with
     self:update_archetype(component, with)
-    self:rawset(component, value or self:get(component))
+    self:rawset(component, value)
     return self
 end
 

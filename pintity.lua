@@ -172,10 +172,11 @@ end
 function Entity:replace(component, with, value)
     -- Prevents column from being emptied or entity having `component` ADDED
     if self.components & component == 0 then return self:set(with, value) end
+    value = value or self:get(component)
     -- Xor remove, or add
     self.components = self.components ^^ component | with
     self:update_archetype(component, with)
-    self:rawset(component, value or self:get(component))
+    self:rawset(component, value)
     return self
 end
 
