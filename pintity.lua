@@ -278,7 +278,8 @@ function instantiate(prefab)
     local new = e:set(prefab.bits).archetype
     -- Saves several archetype moves
     for bit, value in next, prefab do
-        if new[bit] then add(new[bit], value) else new[bit] = {value} end
+        -- Once again, prefab instantiation proves to be hacky
+        if (new[bit]) e:rawset(bit, value) else new.bits, new[bit] = nil, {value}
     end
     return e
 end
