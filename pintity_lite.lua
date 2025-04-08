@@ -1,16 +1,15 @@
--- Pintity: a stupid simple ECS for Pico-8
+-- Pintity_lite: an even simpler ECS for Pico-8
 -- By Morgan.
 
--- 708 tokens compressed
+-- 507 tokens compressed
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
 --- @alias Component integer a singular bit identifying a component
 --- @class ComponentSet integer bitset of components
 --- @alias System fun(entities: Entity[], ...: any[]) -> bool
---- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
+--- @alias Query { Terms: Component[], bits: ComponentSet, [integer]: any[] }
 --- @alias Archetype { Component: any[], entities: Entity[] }
---- @class Prefab { bits: ComponentSet, [integer]: any }
 
 arch0 = {entities = {}}
 --- @type { ComponentSet: Archetype }
@@ -24,10 +23,8 @@ new_archetypes = {}
 --- @type Component
 --- The current component ID\
 --- Pico-8 uses 32-bit fixed point numbers, so `1` is actually bit 16
-component_bit = 1 >> 16
+component_bit = 1 << 15
 
---- @type { Component: any }
-components = {}
 
 --- @type System[]
 --- Systems to be run each frame
@@ -62,13 +59,6 @@ end
 ---@return boolean
 function Entity:has(component)
     return self.components & component == component
-end
-
----Checks if the entity is alive.\
----Note: an entity is not considered alive until it has at least one component
----@return boolean
-function Entity:alive()
-    return self.components ~= 0
 end
 
 ---Returns the value of this entity's component, or nil if it doesn't have it
@@ -136,7 +126,6 @@ end
 ---@param value? any
 ---@return self
 function Entity:set(component, value)
-    value = value or copy(components[component])
     if self.components & component ~= component then
         -- Add the component with bitwise or
         self.components |= component
@@ -147,8 +136,6 @@ function Entity:set(component, value)
     end
     return self
 end
-
-Entity.add = Entity.set
 
 ---Removes a component from an entity.
 ---@param component Component
@@ -185,27 +172,13 @@ function Entity:delete()
     self:update_archetype(0)
 end
 
----Performs a shallow copy of a table or other value
----@param value any
-function copy(value)
-    if type(value) ~= "table" then return value end
-    local copied = {}
-    for k, v in next, value do
-        copied[k] = v
-    end
-    return copied
-end
-
 ---Creates a new component identifier.\
 ---Note: Pintity can only handle creating up to 32 components.
 ---@return Component component
 function component(value)
-    ---@type Component
-    local b = component_bit
-    assert(b ~= 0, "Error: component limit reached. Applications can only have up to 32 components.")
-    components[b] = value
-    component_bit <<= 1
-    return b
+    ---@type Component doesn't assert when there are more than 32 components
+    component_bit <<>= 1
+    return component_bit
 end
 
 ---Queries match entities with specific components.
@@ -215,24 +188,16 @@ end
 local function query(terms, exclude)
     local filter = 0
     for term in all(terms) do filter |= term end
-    local results = { terms = terms, bits = filter, exclude = 0 }
-    if exclude then
-        filter = 0
-        for excludeTerm in all(exclude) do filter |= excludeTerm end
-        results.exclude = filter
-    end
-    update_query(results, archetypes)
-    return results
+    return { terms = terms, bits = filter }
 end
 
 ---Updates the contents of the query to represent the current state of the ECS.
 ---@param query Query
 ---@param tables Archetype[]
 function update_query(query, tables)
-    if not query.terms then return end
+    if not query.bits then return end
     for bits, archetype in next, tables or new_archetypes do
-        if bits & query.bits == query.bits
-        and bits & query.exclude == 0 then
+        if bits & query.bits == query.bits then
             local fields = { archetype.entities }
             for term in all(query.terms) do
                 add(fields, archetype[term])
@@ -250,39 +215,9 @@ end
 ---@param exclude Component[]|System
 ---@param callback? System
 ---@return System callback
-local function system(terms, exclude, callback)
-    add(queries, terms and query(terms, callback and exclude) or {{0}}) -- Empty table to ensure iteration
-    return add(systems, callback or exclude)
-end
-
----Creates a new prefab. Call `instantiate` on it to spawn a new entity.\
----Example: `enemy = prefab(Position, {5, 10}, Sprite, 1, Target, player, Enemy, nil)`
----@param ... Component|any components and values, or `nil` values for tags
----@return Prefab prefab
-local function prefab(...)
-    local components, args = { bits = 0 }, {...}
-    for i = 1, #args, 2 do
-        local component = args[i]
-        components.bits |= component
-        -- Tags are ignored as `add(table, nil)` has the same behavior as `add(nil, value)`.
-        components[component] = copy(args[i+1])
-    end
-    return components
-end
-
----Instantiates a new entity from a prefab created by `prefab`.
----@param prefab Prefab
----@return Entity instance
-function instantiate(prefab)
-    local e = entity()
-    local new = e:set(prefab.bits).archetype
-    -- Saves several archetype moves
-    for bit, value in next, prefab do
-        -- Once again, prefab instantiation proves to be hacky
-        if (new[bit]) e:rawset(bit, value) else new[bit] = {value}
-    end
-    new.bits = nil
-    return e
+local function system(terms, callback)
+    add(queries, terms and query(terms) or {{0}}) -- Empty table to ensure iteration
+    return add(systems, callback)
 end
 
 ---Progress the ECS each frame. Should be called in `_update`
