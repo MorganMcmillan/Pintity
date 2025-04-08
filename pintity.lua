@@ -7,7 +7,7 @@
 --- @class ComponentSet integer bitset of components
 --- @alias System fun(entities: Entity[], ...: any[]) -> bool
 --- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
---- @alias Archetype { Component: any[], entities: integer[] }
+--- @alias Archetype { Component: any[], entities: Entity[] }
 --- @class Prefab { bits: ComponentSet, [integer]: any }
 
 arch0 = {entities = {}}
@@ -278,7 +278,7 @@ function instantiate(prefab)
     local new = e:set(prefab.bits).archetype
     -- Saves several archetype moves
     for bit, value in next, prefab do
-        add(new[bit], value)
+        if new[bit] then add(new[bit], value) else new[bit] = {value} end
     end
     return e
 end
