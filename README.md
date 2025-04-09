@@ -48,7 +48,7 @@ end)
 
 -- Tasks are systems without any query, and run only once each frame
 local DisplayPlayer = system(nil, function()
-    local pos = get(player, Position)
+    local pos = player:get(Position)
     print(pos.x, pos.y)
 end)
 ```
