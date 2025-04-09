@@ -83,8 +83,10 @@ end
 ---This should only be used if the entity is known to have the component
 ---@param component Component
 ---@param value any
+---@return self
 function Entity:rawset(component, value)
     self.archetype[component][self.row] = value
+    return self
 end
 
 -- Returns the last item of the table
@@ -176,8 +178,7 @@ function Entity:replace(component, with, value)
     -- Xor remove, or add
     self.components = self.components ^^ component | with
     self:update_archetype(component, with)
-    self:rawset(component, value)
-    return self
+    return self:rawset(component, value)
 end
 
 ---Delete the entity and all its components.
