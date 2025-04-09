@@ -18,7 +18,7 @@ archetypes = {[0] = arch0}
 --- @type { ComponentSet: Archetype }
 --- New archetypes created this frame
 --- Prevents system queries from adding archetypes twice by setting it to all archetypes this frame
-new_archetypes = {}
+query_cache = {}
 
 --- @type Component
 --- The current component ID\
@@ -114,7 +114,7 @@ function Entity:update_archetype(exclude, include)
         if include then new[include] = {} end
 
         archetypes[self.components] = new
-        new_archetypes[self.components] = new
+        query_cache[self.components] = new
     end
     self.archetype = new
     self.row = #new.entities
@@ -194,7 +194,7 @@ end
 ---@param tables Archetype[]
 function update_query(query, tables)
     if not query.bits then return end
-    for bits, archetype in next, tables or new_archetypes do
+    for bits, archetype in next, tables or query_cache do
         if bits & query.bits == query.bits then
             local fields = { archetype.entities }
             for term in all(query.terms) do
@@ -220,10 +220,10 @@ end
 
 ---Progress the ECS each frame. Should be called in `_update`
 function progress()
-    if next(new_archetypes) then
+    if next(query_cache) then
         foreach(queries, update_query)
         -- The archetypes are no longer new this frame
-        new_archetypes = {}
+        query_cache = {}
     end
     for i, system in inext, systems do
         for cols in all(queries[i]) do
