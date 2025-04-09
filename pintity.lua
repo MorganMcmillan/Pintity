@@ -291,7 +291,7 @@ end
 function progress()
     if next(query_cache) then
         foreach(queries, update_query)
-        -- The archetypes are no longer new this frame
+        -- Clear query cache
         query_cache = {}
     end
     for i, system in inext, systems do
