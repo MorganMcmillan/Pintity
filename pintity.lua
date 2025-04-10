@@ -7,7 +7,8 @@
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
 --- @alias Component integer a singular bit identifying a component
 --- @class ComponentSet integer bitset of components
---- @alias System fun(entities: Entity[], ...: any[]) -> bool
+--- @alias System fun(entities: Entity[], ...: any[]) -> skip?: boolean
+--- @class Phase { [integer]: Query, systems: System[] }
 --- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
 --- @alias Archetype { Component: any[], entities: Entity[] }
 --- @class Prefab { bits: ComponentSet, [integer]: any }
@@ -28,6 +29,9 @@ component_bit = 1 >> 16
 
 --- @type { Component: any }
 components = {}
+
+--- @type Phase[]
+phases = {}
 
 --- @type System[]
 --- Systems to be run each frame
@@ -244,18 +248,38 @@ function update_query(query, tables)
     end
 end
 
+---Creates a new phase. Systems can be added to phases.\
+---Phases are run using `progress`.\
+---All phases must be updated using `update_phases()` in `_update` before `progress` is called.\
+---Example: `OnUpdate, OnDraw = phase(), phase()`
+---@return Phase
+local function phase()
+    return add(phases, { systems = {} })
+end
+
+---Automatically updates all phases. Must be called in `_update` before any `progress` is called.
+function update_phases()
+    if next(query_cache) then
+        for phase in all(phases) do
+            foreach(phase, update_query)
+        end
+    end
+end
+
 --- Create and add a new system.\
 --- Systems are run once per frame, and in the order they are created.\
 --- If a system needs to stop iteration, return `true`.\
 --- Important: if a system needs to delete entities or add new components, it should iterate **in reverse** to prevent entities from being skipped.
+---@param phase Phase the phase to run this system on
 ---@param terms Component[]
 ---@param exclude Component[]|System
 ---@param callback? System
 ---@return System callback
-local function system(terms, exclude, callback)
-    add(queries, terms and query(terms, callback and exclude) or {{0}}) -- Empty table to ensure iteration
-    return add(systems, callback or exclude)
+local function system(phase, terms, exclude, callback)
+    add(phase, terms and query(terms, callback and exclude) or {{0}}) -- Empty table to ensure iteration
+    return add(phase.systems, callback or exclude)
 end
+
 
 ---Creates a new prefab. Call `instantiate` on it to spawn a new entity.\
 ---Example: `enemy = prefab(Position, {5, 10}, Sprite, 1, Target, player, Enemy, nil)`
@@ -283,19 +307,17 @@ function instantiate(prefab)
         -- Once again, prefab instantiation proves to be hacky
         if (new[bit]) e:rawset(bit, value) else new[bit] = {value}
     end
+    -- Keep "bits" field from creeping in
     new.bits = nil
     return e
 end
 
----Progress the ECS each frame. Should be called in `_update`
-function progress()
-    if next(query_cache) then
-        foreach(queries, update_query)
-        -- Clear query cache
-        query_cache = {}
-    end
-    for i, system in inext, systems do
-        for cols in all(queries[i]) do
+---Runs all systems that are part of `phase`
+---@param phase Phase the current phase to run.
+function progress(phase)
+    for i, query in inext, phase do
+        local system = phase.systems[i]
+        for cols in all(query) do
             -- Note: empty tables are never deleted, so they aren't removed from queries
             -- Skip empty archetypes
             if #cols[1] ~= 0 then
