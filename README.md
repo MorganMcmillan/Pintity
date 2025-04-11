@@ -125,7 +125,7 @@ Systems are functions that are ran for each entity in bulk. Systems within the s
 
 Example:
 ```lua
-local Move = system(OnUpdate { Position, Velocity }, function(entities, positions, velocities)
+local Move = system(OnUpdate, { Position, Velocity }, function(entities, positions, velocities)
     for i = 1, #entities do
         positions[i].x += velocities[i].x
         positions[i].y += velocities[i].y
