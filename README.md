@@ -196,7 +196,6 @@ Pintity offers a lite version for the token-conscious. It removes certain featur
 ## Changes and Removed Features
 
 - `component` doesn't check if more than 32 components have been made
-- Removed 
 - `get` throws if the entity doesn't have the component
 - `set` may not receive a nil value
 - `remove` and `replace` do not check if the entity has the specific component
