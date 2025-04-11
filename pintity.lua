@@ -98,10 +98,9 @@ function last(t) return t[#t] end
 
 -- Removes the item at i and swaps its value with the last value
 function swap_remove(t, i)
-    local val = t[i]
-    if t[2] then t[i] = last(t) end
-    t[#t] = nil
-    return val
+    i, t[i] = t[i], last(t)
+    deli(t)
+    return i
 end
 
 ---Changes the archetype of the entity.\
