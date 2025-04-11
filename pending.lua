@@ -19,3 +19,13 @@ function progress_each()
         end
     end
 end
+
+---Clones an entity.
+---@return Entity
+function Entity:clone()
+    local clone = entity():set(self.components)
+    for bit, value in next, self.archetype do
+        clone:rawset(bit, value)
+    end
+    return clone:rawset("entities", clone)
+end

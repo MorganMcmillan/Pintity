@@ -3,7 +3,7 @@
 
 -- This version removes a lot of features and safety checks that the full version has.
 
--- 437 tokens compressed
+-- 426 tokens compressed
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
@@ -172,7 +172,7 @@ end
 ---Creates a new component identifier.\
 ---Note: Pintity can only handle creating up to 32 components.
 ---@return Component component
-function component()
+local function component()
     ---@type Component doesn't assert when there are more than 32 components
     component_bit <<>= 1
     return component_bit

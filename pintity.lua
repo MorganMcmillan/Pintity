@@ -213,7 +213,7 @@ end
 ---Note: Pintity can only handle creating up to 32 components.
 ---@param value? any
 ---@return Component component
-function component(value)
+local function component(value)
     ---@type Component
     local b = component_bit
     assert(b ~= 0, "Error: component limit reached. Applications can only have up to 32 components.")
