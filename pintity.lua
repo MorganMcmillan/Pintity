@@ -1,7 +1,7 @@
 -- Pintity: a stupid simple ECS for Pico-8
 -- By Morgan.
 
--- 708 tokens compressed
+-- 733 tokens compressed
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
@@ -10,16 +10,19 @@
 --- @alias System fun(entities: Entity[], ...: any[]) -> skip?: boolean
 --- @class Phase { [integer]: Query, systems: System[] }
 --- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
---- @alias Archetype { Component: any[], entities: Entity[] }
+--- @alias Archetype { [Component]: any[], entities: Entity[] }
 --- @class Prefab { bits: ComponentSet, [integer]: any }
 
+--- @type Archetype
+--- The archetype containing no components. Used for recycling.
 arch0 = {entities = {}}
+
 --- @type { ComponentSet: Archetype }
 archetypes = {[0] = arch0}
 
 --- @type { ComponentSet: Archetype }
 --- New archetypes created this frame to update queries by\
---- Prevents system queries from adding archetypes twice by setting it to all archetypes this frame
+--- Prevents system queries from adding archetypes twice
 query_cache = {}
 
 --- @type Component
@@ -50,7 +53,8 @@ queries = {}
 local Entity = {}
 Entity.__index = Entity
 
----Creates a new entity
+---Creates a new entity.\
+---Dead entities may be recycled, so this should never be called twice before adding a component.
 ---@return Entity
 function entity()
     -- Recycle unused entities
@@ -61,21 +65,21 @@ function entity()
     )
 end
 
----Checks if the entity has a component or set of components
+---Checks if an entity has a component or set of components
 ---@param component Component|ComponentSet
 ---@return boolean
 function Entity:has(component)
     return self.components & component == component
 end
 
----Checks if the entity is alive.\
+---Checks if an entity is alive.\
 ---Note: an entity is not considered alive until it has at least one component
 ---@return boolean
 function Entity:alive()
     return self.components ~= 0
 end
 
----Returns the value of this entity's component, or nil if it doesn't have it
+---Returns the value of an entity's component, or nil if it doesn't have it.
 ---@param component Component
 ---@return any|nil
 function Entity:get(component)
@@ -84,7 +88,7 @@ function Entity:get(component)
 end
 
 ---Sets the component's value, but without checking that it exists.\
----This should only be used if the entity is known to have the component
+---This should only be used if the entity is known to have the component.
 ---@param component Component
 ---@param value any
 ---@return self
@@ -103,7 +107,7 @@ function swap_remove(t, i)
     return i
 end
 
----Changes the archetype of the entity.\
+---Changes the archetype of an entity.\
 ---This is a low-level operation that is not meant to be used directly. Instead use `set`, `remove` or `replace`
 ---@param exclude Component when creating a new archetype with remove, ensures that this component is not added
 ---@param include? Component when creating a new archetype with set, add this component to have its value set
@@ -115,10 +119,12 @@ function Entity:update_archetype(exclude, include)
     -- Swap remove out all components
     -- Note: "entities" is treated like a regular component, and will be included
     if new then
+        -- Move row from old archetype to new
         for bit, col in next, old do
             add(new[bit], swap_remove(col, row))
         end
-    else -- Create new archetype and add it
+    else
+        -- Create new archetype from old's row and add it
         new = {}
         for bit, col in next, old do
             new[bit] = {swap_remove(col, row)}
@@ -185,7 +191,7 @@ function Entity:replace(component, with, value)
     return self:rawset(with, value)
 end
 
----Delete the entity and all its components.
+---Deletes an entity and all of its components.
 function Entity:delete()
     self.components = 0
     self:update_archetype(0)
@@ -193,6 +199,7 @@ end
 
 ---Performs a shallow copy of a table or other value
 ---@param value any
+---@return any
 function copy(value)
     if type(value) ~= "table" then return value end
     local copied = {}
@@ -204,6 +211,7 @@ end
 
 ---Creates a new component identifier.\
 ---Note: Pintity can only handle creating up to 32 components.
+---@param value? any
 ---@return Component component
 function component(value)
     ---@type Component
@@ -273,7 +281,7 @@ end
 --- Important: if a system needs to delete entities or add new components, it should iterate **in reverse** to prevent entities from being skipped.
 ---@param phase Phase the phase to run this system on
 ---@param terms Component[]
----@param exclude Component[]|System
+---@param exclude? Component[]|System
 ---@param callback? System
 ---@return System callback
 local function system(phase, terms, exclude, callback)
@@ -305,7 +313,6 @@ function instantiate(prefab)
     local new = e:set(prefab.bits).archetype
     -- Saves several archetype moves
     for bit, value in next, prefab do
-        -- Once again, prefab instantiation proves to be hacky
         if (new[bit]) e:rawset(bit, value) else new[bit] = {value}
     end
     -- Keep "bits" field from creeping in

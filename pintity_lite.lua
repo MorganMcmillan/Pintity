@@ -3,7 +3,7 @@
 
 -- This version removes a lot of features and safety checks that the full version has.
 
--- 452 tokens compressed
+-- 437 tokens compressed
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
@@ -11,15 +11,18 @@
 --- @class ComponentSet integer bitset of components
 --- @alias System fun(entities: Entity[], ...: any[]) -> bool
 --- @alias Query { Terms: Component[], bits: ComponentSet, [integer]: any[] }
---- @alias Archetype { Component: any[], entities: Entity[] }
+--- @alias Archetype { [Component]: any[], entities: Entity[] }
 
+--- @type Archetype
+--- The archetype containing no components. Used for recycling.
 arch0 = {entities = {}}
+
 --- @type { ComponentSet: Archetype }
 archetypes = {[0] = arch0}
 
 --- @type { ComponentSet: Archetype }
---- New archetypes created this frame
---- Prevents system queries from adding archetypes twice by setting it to all archetypes this frame
+--- New archetypes created this frame to update queries by\
+--- Prevents system queries from adding archetypes twice
 query_cache = {}
 
 --- @type Component
@@ -32,8 +35,7 @@ component_bit = 1
 systems = {}
 
 --- @type Query[]
---- Queried components to use with each system\
---- Empty queries represent tasks
+--- Queried components to use with each system
 queries = {}
 
 ---An entity is an object that can have an arbitrary amount of data added to it.
@@ -44,7 +46,8 @@ queries = {}
 local Entity = {}
 Entity.__index = Entity
 
----Creates a new entity
+---Creates a new entity.\
+---Dead entities may be recycled, so this should never be called twice before adding a component.
 ---@return Entity
 function entity()
     -- Recycle unused entities
@@ -55,7 +58,7 @@ function entity()
     )
 end
 
----Checks if the entity has a **singular** component.
+---Checks if an entity has a **singular** component.
 ---@param component Component
 ---@return boolean
 function Entity:has(component)
@@ -71,7 +74,7 @@ function Entity:get(component)
 end
 
 ---Sets the component's value, but without checking that it exists.\
----This should only be used if the entity is known to have the component
+---This should only be used if an entity is known to have the component.
 ---@param component Component
 ---@param value any
 function Entity:rawset(component, value)
@@ -89,7 +92,7 @@ function swap_remove(t, i)
     return i
 end
 
----Changes the archetype of the entity.\
+---Changes the archetype of an entity.\
 ---This is a low-level operation that is not meant to be used directly. Instead use `set`, `remove` or `replace`
 ---@param exclude Component when creating a new archetype with remove, ensures that this component is not added
 ---@param include? Component when creating a new archetype with set, add this component to have its value set
@@ -161,7 +164,7 @@ function Entity:replace(component, with, value)
     return self:update_archetype(component, with):rawset(with, value)
 end
 
----Delete the entity and all its components.
+---Deletes the entity and all of its components.
 function Entity:delete()
     self:remove(self.components)
 end
@@ -169,7 +172,7 @@ end
 ---Creates a new component identifier.\
 ---Note: Pintity can only handle creating up to 32 components.
 ---@return Component component
-function component(value)
+function component()
     ---@type Component doesn't assert when there are more than 32 components
     component_bit <<>= 1
     return component_bit
