@@ -264,6 +264,7 @@ function update_phases()
             foreach(phase, update_query)
         end
     end
+    query_cache = {}
 end
 
 --- Create and add a new system.\
