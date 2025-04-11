@@ -164,8 +164,7 @@ end
 
 ---Delete the entity and all its components.
 function Entity:delete()
-    self.components = 0
-    self:update_archetype(0)
+    self:remove(self.components)
 end
 
 ---Creates a new component identifier.\
