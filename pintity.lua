@@ -109,6 +109,7 @@ end
 ---@param exclude Component when creating a new archetype with remove, ensures that this component is not added
 ---@param include? Component when creating a new archetype with set, add this component to have its value set
 function Entity:update_archetype(exclude, include)
+    local components = self.components
     local row, old, new = self.row, self.archetype, archetypes[self.components]
     -- Invariant if the last entity is this one
     last(old.entities).row = row
@@ -129,8 +130,8 @@ function Entity:update_archetype(exclude, include)
         -- `set`: Ensures the newly set component is included in the archetype
         if include then new[include] = {} end
 
-        archetypes[self.components] = new
-        query_cache[self.components] = new
+        archetypes[components] = new
+        query_cache[components] = new
     end
     self.archetype = new
     self.row = #new.entities

@@ -26,7 +26,7 @@ function reset_fn()
     archetypes, query_cache = {[0] = arch0}, {}
     component_bit = 1 >> 16
     components = {}
-    queries, systems = {}, {}
+    phases = {}
 end
 
 function write(text)
@@ -60,12 +60,6 @@ test("components shift left", function ()
     eq(foo, 1 >> 16)
     eq(bar, 1 >> 15)
     eq(baz, 1 >> 14)
-end)
-
-test("32 component max (fails)", function ()
-    for i = 1, 33 do
-        component()
-    end
 end)
 
 test("tags not added to archetype", function ()
@@ -180,4 +174,17 @@ test("replace components", function ()
     eq(bz_arch[foo], nil)
     eq(zf_arch[foo], nil)
     eq(zf_arch[bar], nil)
+end)
+
+test("phases update correctly", function ()
+    local foo, bar, baz = component(), component(), component()
+    
+    local on_test = phase()
+    system(on_test, {foo, bar,baz}, function (e)
+        write"system running on phase on_test"
+    end)
+    
+    local e = entity():set(foo):set(bar):set(baz)
+    update_phases()
+    progress(on_test)
 end)

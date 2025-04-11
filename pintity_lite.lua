@@ -1,6 +1,8 @@
 -- Pintity_lite: an even simpler ECS for Pico-8
 -- By Morgan.
 
+-- This version removes a lot of features and safety checks that the full version has.
+
 -- 507 tokens compressed
 
 --- Type definitions:
@@ -23,8 +25,7 @@ query_cache = {}
 --- @type Component
 --- The current component ID\
 --- Pico-8 uses 32-bit fixed point numbers, so `1` is actually bit 16
-component_bit = 1 << 15
-
+component_bit = 1
 
 --- @type System[]
 --- Systems to be run each frame
@@ -54,19 +55,19 @@ function entity()
     )
 end
 
----Checks if the entity has a component or set of components
----@param component Component|ComponentSet
+---Checks if the entity has a **singular** component.
+---@param component Component
 ---@return boolean
 function Entity:has(component)
-    return self.components & component == component
+    return self.archetype[component]
 end
 
----Returns the value of this entity's component, or nil if it doesn't have it
+---Returns the value of this entity's component./
+---Errors if entity doesn't have `component`.
 ---@param component Component
 ---@return any|nil
 function Entity:get(component)
-    local col = self.archetype[component]
-    return col and col[self.row]
+    return self.archetype[component][self.row]
 end
 
 ---Sets the component's value, but without checking that it exists.\
@@ -75,6 +76,7 @@ end
 ---@param value any
 function Entity:rawset(component, value)
     self.archetype[component][self.row] = value
+    return self
 end
 
 -- Returns the last item of the table
@@ -93,7 +95,8 @@ end
 ---@param exclude Component when creating a new archetype with remove, ensures that this component is not added
 ---@param include? Component when creating a new archetype with set, add this component to have its value set
 function Entity:update_archetype(exclude, include)
-    local row, old, new = self.row, self.archetype, archetypes[self.components]
+    local components = self.components
+    local row, old, new = self.row, self.archetype, archetypes[components]
     -- Invariant if the last entity is this one
     last(old.entities).row = row
     -- Swap remove out all components
@@ -113,28 +116,26 @@ function Entity:update_archetype(exclude, include)
         -- `set`: Ensures the newly set component is included in the archetype
         if include then new[include] = {} end
 
-        archetypes[self.components] = new
-        query_cache[self.components] = new
+        archetypes[components] = new
+        query_cache[components] = new
     end
     self.archetype = new
     self.row = #new.entities
+    return self
 end
 
 ---Sets the value of an entity's component.\
----Important: a component must not be set to nil, unless it either has a default value or is a tag.
+---Important: a component must not be set to nil. Tag support was removed
 ---@param component Component
 ---@param value? any
 ---@return self
 function Entity:set(component, value)
-    if self.components & component ~= component then
+    if not self.archetype[component] then
         -- Add the component with bitwise or
         self.components |= component
-        self:update_archetype(0, value and component)
+        self:update_archetype(0, value)
     end
-    if value then
-        self:rawset(component, value)
-    end
-    return self
+    return self:rawset(component, value)
 end
 
 ---Removes a component from an entity.\
@@ -143,25 +144,22 @@ end
 ---@return self
 function Entity:remove(component)
     self.components ^^= component
-    self:update_archetype(component)
-    return self
+    return self:update_archetype(component)
 end
 
 ---Replaces one component with another.\
 ---This is functionally equivalent to calling `remove` followed by `set`, but saves an archetype move.\
 ---This should never be called with tags.\
----UNSAFE: entity MUST have component
+---UNSAFE: entity MUST have component, and MUST NOT have with.
 ---@param component Component the component to replace
 ---@param with Component the component that's replacing the other one
 ---@param value? any the value to replace with. If nil, replaces `with` with the value of `component`.
 ---@return self
 function Entity:replace(component, with, value)
     value = value or self:get(component)
-    -- Xor remove, or add
-    self.components = self.components ^^ component | with
-    self:update_archetype(component, with)
-    self:rawset(component, value)
-    return self
+    -- Xor remove, or add (requires that `with` is not already present)
+    self.components ^^= component | with
+    return self:update_archetype(component, with):rawset(with, value)
 end
 
 ---Delete the entity and all its components.
@@ -193,7 +191,6 @@ end
 ---@param query Query
 ---@param tables Archetype[]
 function update_query(query, tables)
-    if not query.bits then return end
     for bits, archetype in next, tables or query_cache do
         if bits & query.bits == query.bits then
             local fields = { archetype.entities }
@@ -210,29 +207,22 @@ end
 --- If a system needs to stop iteration, return `true`.\
 --- Important: if a system needs to delete entities or add new components, it should iterate **in reverse** to prevent entities from being skipped.
 ---@param terms Component[]
----@param exclude Component[]|System
----@param callback? System
----@return System callback
+---@param callback System
 local function system(terms, callback)
-    add(queries, terms and query(terms) or {{0}}) -- Empty table to ensure iteration
-    return add(systems, callback)
+    add(queries, query(terms)) -- Removed support for tasks
+    add(systems, callback)
 end
 
 ---Progress the ECS each frame. Should be called in `_update`
 function progress()
     if next(query_cache) then
         foreach(queries, update_query)
-        -- The archetypes are no longer new this frame
+        -- Clear query cache
         query_cache = {}
     end
     for i, system in inext, systems do
         for cols in all(queries[i]) do
-            -- Note: empty tables are never deleted, so they aren't removed from queries
-            -- Skip empty archetypes
-            if #cols[1] ~= 0 then
-                -- Skip system if it returns true
-                if system(unpack(cols)) then break end
-            end
+            system(unpack(cols))
         end
     end
 end
