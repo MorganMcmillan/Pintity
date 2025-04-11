@@ -178,21 +178,11 @@ function component()
     return component_bit
 end
 
----Queries match entities with specific components.
----@param terms Component[] the list of components to be queried
----@param exclude? Component[] a list of components to exclude from the query
----@return Archetype[] query Every archetype matched with the query
-local function query(terms)
-    local filter = 0
-    for term in all(terms) do filter |= term end
-    return { terms = terms, bits = filter }
-end
-
 ---Updates the contents of the query to represent the current state of the ECS.
 ---@param query Query
 ---@param tables Archetype[]
-function update_query(query, tables)
-    for bits, archetype in next, tables or query_cache do
+function update_query(query)
+    for bits, archetype in next, query_cache do
         if bits & query.bits == query.bits then
             local fields = { archetype.entities }
             for term in all(query.terms) do
@@ -210,7 +200,9 @@ end
 ---@param terms Component[]
 ---@param callback System
 local function system(terms, callback)
-    add(queries, query(terms)) -- Removed support for tasks
+    local filter = 0
+    for term in all(terms) do filter |= term end
+    add(queries, { terms = terms, bits = filter }) -- Removed support for tasks
     add(systems, callback)
 end
 
