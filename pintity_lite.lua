@@ -3,7 +3,7 @@
 
 -- This version removes a lot of features and safety checks that the full version has.
 
--- 456 tokens compressed
+-- 452 tokens compressed
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
@@ -180,7 +180,7 @@ end
 ---@param terms Component[] the list of components to be queried
 ---@param exclude? Component[] a list of components to exclude from the query
 ---@return Archetype[] query Every archetype matched with the query
-local function query(terms, exclude)
+local function query(terms)
     local filter = 0
     for term in all(terms) do filter |= term end
     return { terms = terms, bits = filter }
