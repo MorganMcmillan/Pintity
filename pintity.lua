@@ -113,7 +113,7 @@ end
 ---@param include? Component when creating a new archetype with set, add this component to have its value set
 function Entity:update_archetype(exclude, include)
     local components = self.components
-    local row, old, new = self.row, self.archetype, archetypes[self.components]
+    local row, old, new = self.row, self.archetype, archetypes[components]
     -- Invariant if the last entity is this one
     last(old.entities).row = row
     -- Swap remove out all components
@@ -194,7 +194,7 @@ end
 ---Deletes an entity and all of its components.
 function Entity:delete()
     self.components = 0
-    self:update_archetype(0)
+    self:update_archetype()
 end
 
 ---Performs a shallow copy of a table or other value
