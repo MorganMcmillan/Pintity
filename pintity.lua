@@ -239,7 +239,8 @@ local function query(terms, exclude)
     return results
 end
 
----Updates the contents of the query to represent the current state of the ECS.
+--- Updates the contents of the query to represent the current state of the ECS.\
+--- Adds new archetypes after they are created
 ---@param query Query
 ---@param tables Archetype[]
 function update_query(query, tables)
@@ -265,7 +266,7 @@ local function phase()
     return add(phases, { systems = {} })
 end
 
----Automatically updates all phases. Must be called in `_update` before any `progress` is called.
+--- Automatically updates all phases. Must be called in `_update` before any `progress` is called.
 function update_phases()
     if next(query_cache) then
         for phase in all(phases) do
@@ -283,10 +284,10 @@ end
 ---@param terms Component[]
 ---@param exclude? Component[]|System
 ---@param callback? System
----@return System callback
+---@return Archetype[] query
 local function system(phase, terms, exclude, callback)
-    add(phase, terms and query(terms, callback and exclude) or {{0}}) -- Empty table to ensure iteration
-    return add(phase.systems, callback or exclude)
+    add(phase.systems, callback or exclude)
+    return add(phase, terms and query(terms, callback and exclude) or {{0}}) -- Empty table to ensure iteration
 end
 
 
