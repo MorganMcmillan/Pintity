@@ -25,7 +25,7 @@ Components describe data and are added to entities.
 
 ```lua
 -- A component is a name that matches to an entity's attribute.
-component"postion"
+component"position"
 component"velocity"
 component"player"
 
@@ -102,14 +102,45 @@ Deletes all data from the entity and makes it not alive. Deleted entities will b
 
 ### Setting Component Values
 
-TODO
+Component values can be set like regular key-value pairs. Just make sure that the name you use for your entity's pair matches the name of a component.
+
+Example:
+```lua
+component"position"
+
+local e = entity()
+e.position = { 64, 64 }
+```
+
+Entities have a special `__newindex` metamethod that checks if the key matches any component's name, and if it does then the entity will be available to be queried.
+
+Regular key-value pairs are treated as **non-fragmenting components**, meaning that they do not change which table the entity will be queried from, and may or may not show up in the same archetype.
 
 ### Getting Component Values
 
+Component key-value pairs are nothing special. They are stored directly inside the entity, and so their values can be retrieved using dot syntax.
+
+```lua
+print(entity.position.x .. " " .. entity.position.y)
+```
+
 ### Deleting Components and Entities
 
-### 
+To remove a component from an entity and ensure that this is reflected in any queries, simply call the entity with the component's name, like this:
 
+```lua
+-- Deletes `position`
+e"position"
+```
+
+This syntax may seem strange, but it actually saves several tokens.
+
+This syntax can also be used to delete all components from an entity. Simply call the entity without any arguments.
+
+```lua
+-- Deletes all components
+e()
+```
 
 ## `system(phase, terms, [exclude,] callback(entities) -> skip: boolean) -> Query`
 
@@ -117,7 +148,7 @@ Systems are functions that are ran for each entity in bulk. Systems within the s
 
 `terms` and `exclude` are a list of components to include and exclude, respectively. They are the same kind that are passed to `query`, which this function calls internally.
 
-`callback` receives a list of *entities*, each guarenteed to have the component they are queried for, and not the ones that are excluded.
+`callback` receives a list of *entities*, each guaranteed to have the component they are queried for, and not the ones that are excluded.
 
 Example:
 ```lua
@@ -185,9 +216,36 @@ local e = instantiate(circle)
 circle.postion = { 64, 64 }
 ```
 
+# Tips and Tricks
+
+## Create Multiple Components
+
+One trick to save tokens is to `split` a list of component names and call `component` for each of them.
+
+```lua
+foreach(split"position,velocity,acceleration,color,player", component)
+```
+
+## Dynamically Replace Systems
+
+It's possible to get the index of the system that was last created that phase using `#phase.systems`.
+
+```lua
+function one_fish() ...
+function two_fish() ...
+
+system(OnUpdate, "fish", one_fish)
+local idx_fish = #OnUpdate.systems
+
+-- Replace one_fish with two_fish
+OnUpdate.systems[idx_fish] = two_fish
+```
+
+This can be useful for handling multiple scenes or when a specific piece of logic needs to be run only once and then replaced thereafter.
+
 # Lite Version
 
-Pintity offers a lite version for the token-conscious. It removes certain features and has worse performance in exchange for a token count of ~450.
+Pintity offers a lite version for the token-conscious. It removes certain features and has worse performance in exchange for a token count of ~340.
 
 ## Changes and Removed Features
 
