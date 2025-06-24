@@ -189,19 +189,10 @@ circle.postion = { 64, 64 }
 
 Pintity offers a lite version for the token-conscious. It removes certain features and has worse performance in exchange for a token count of ~450.
 
-> [!Important]
-> The current version of Pintity-Lite has not yet caught up to the full version's changes.
-
 ## Changes and Removed Features
 
 - `component` doesn't check if more than 32 components have been made
-- `get` throws if the entity doesn't have the component
-- `set` may not receive a nil value
-- `remove` and `replace` do not check if the entity has the specific component
 - `system` no longer takes an `exclude` parameter
-- Removed `Entity:alive`
-- Removed support for tags
-- Removed `query`
 - Removed `phase` and phases
     - Lite opts to use a global phase for all systems, intended to be progressed in `_update`
     - `system` and `progress` no longer receive a phase

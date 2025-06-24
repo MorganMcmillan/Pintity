@@ -1,17 +1,18 @@
 -- Pintity: a stupid simple ECS for Pico-8
 -- By Morgan.
 
--- 733 tokens compressed
+-- 545 tokens compressed
+-- 188 tokens less than 1.0.0 (733 tokens)
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
 --- @alias Component integer a singular bit identifying a component
 --- @class ComponentSet integer bitset of components
---- @alias System fun(entities: Entity[], ...: any[]) -> skip?: boolean
+--- @alias System fun(entities: Entity[]) -> skip?: boolean
 --- @class Phase { [integer]: Query, systems: System[] }
 --- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
 --- @alias Archetype Entity[]
---- @class Prefab { bits: ComponentSet, string: any }
+--- @class Prefab { bits: ComponentSet, [string]: any }
 
 --- @type Archetype
 --- The archetype containing no components. Used for recycling.
@@ -50,13 +51,13 @@ end
 
 -- Used to delete a value from an entity. This may look strange, but it actually saves 2 tokens.
 -- If name is not given, then the entity is deleted.
+-- Note: component data is not actually removed, but it should never be accessed.
 function pint_mt:__call(name)
     if name then
         -- Remove just one component
-        self.components, self[name] ^^= components[name]
+        self.components ^^= components[name]
     else
         -- Remove all components.
-        -- Note: component data is not actually removed, but it should never be accessed.
         self.components = 0
     end
     update_archetype(self)
@@ -111,23 +112,6 @@ function update_archetype(entity)
     end
     entity.archetype = new
     entity.row = #new
-end
-
----Replaces one component with another.\
----This is functionally equivalent to calling `remove` followed by `set`, but saves an archetype move.\
----This should never be called with tags.
----@param component Component the component to replace
----@param with Component the component that's replacing the other one
----@param value? any the value to replace with. If nil, replaces `with` with the value of `component`.
----@return self
-function Entity:replace(component, with, value)
-    -- Prevents column from being emptied or entity having `component` ADDED
-    if self.components & component == 0 then return self:set(with, value) end
-    value = value or self:get(component)
-    -- Xor remove, or add
-    self.components = self.components ^^ component | with
-    self:update_archetype(component, with)
-    return self:rawset(with, value)
 end
 
 ---Creates a new component identifier.\

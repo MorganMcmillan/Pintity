@@ -3,83 +3,79 @@
 
 -- This version removes a lot of features and safety checks that the full version has.
 
--- 426 tokens compressed
+-- 339 tokens compressed
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
 --- @alias Component integer a singular bit identifying a component
 --- @class ComponentSet integer bitset of components
---- @alias System fun(entities: Entity[], ...: any[]) -> bool
---- @alias Query { Terms: Component[], bits: ComponentSet, [integer]: any[] }
---- @alias Archetype { [Component]: any[], entities: Entity[] }
+--- @alias System fun(entities: Entity[], ...: any[]) -> skip?: boolean
+--- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
+--- @alias Archetype Entity[]
+--- @class Prefab { [string]: any }
 
 --- @type Archetype
 --- The archetype containing no components. Used for recycling.
-arch0 = {entities = {}}
+arch0 = {}
 
 --- @type { ComponentSet: Archetype }
 archetypes = {[0] = arch0}
 
 --- @type { ComponentSet: Archetype }
---- New archetypes created this frame to update queries by\
---- Prevents system queries from adding archetypes twice
+--- New archetypes created this frame to update queries by.\
+--- Prevents system queries from adding archetypes twice.
 query_cache = {}
 
 --- @type Component
 --- The current component ID\
 --- Pico-8 uses 32-bit fixed point numbers, so `1` is actually bit 16
-component_bit = 1
+component_bit = 1 >> 16
+
+--- @type { string: Component }
+components = {}
 
 --- @type System[]
---- Systems to be run each frame
 systems = {}
 
 --- @type Query[]
---- Queried components to use with each system
 queries = {}
 
----An entity is an object that can have an arbitrary amount of data added to it.
----@class Entity
----@field archetype Archetype
----@field components ComponentSet
----@field row integer
-local Entity = {}
-Entity.__index = Entity
+pint_mt = {}
+
+-- Used to add a new component
+function pint_mt:__newindex(name, value)
+    local bit = components[name]
+    if bit then
+        self.components |= bit
+        update_archetype(self)
+    end
+    rawset(self, name, value)
+end
+
+-- Used to delete a value from an entity. This may look strange, but it actually saves 2 tokens.
+-- If name is not given, then the entity is deleted.
+function pint_mt:__call(name)
+    -- Note: component data is not actually removed, but it should never be accessed.
+    if name then
+        -- Remove just one component
+        self.components ^^= components[name]
+    else
+        -- Remove all components.
+        self.components = 0
+    end
+    update_archetype(self)
+end
 
 ---Creates a new entity.\
----Dead entities may be recycled, so this should never be called twice before adding a component.
+---Entities with no components may be recycled, so this should never be called twice before adding a component.
 ---@return Entity
 function entity()
     -- Recycle unused entities
-    return last(arch0.entities) or setmetatable(
+    return last(arch0) or setmetatable(
         -- Row is known to be 1, as arch0 is empty
-        add(arch0.entities, { archetype = arch0, components = 0, row = 1 }),
-        Entity
+        add(arch0, { archetype = arch0, components = 0, row = 1 }),
+        pint_mt
     )
-end
-
----Checks if an entity has a **singular** component.
----@param component Component
----@return boolean
-function Entity:has(component)
-    return self.archetype[component]
-end
-
----Returns the value of this entity's component./
----Errors if entity doesn't have `component`.
----@param component Component
----@return any|nil
-function Entity:get(component)
-    return self.archetype[component][self.row]
-end
-
----Sets the component's value, but without checking that it exists.\
----This should only be used if an entity is known to have the component.
----@param component Component
----@param value any
-function Entity:rawset(component, value)
-    self.archetype[component][self.row] = value
-    return self
 end
 
 -- Returns the last item of the table
@@ -96,99 +92,54 @@ end
 ---This is a low-level operation that is not meant to be used directly. Instead use `set`, `remove` or `replace`
 ---@param exclude Component when creating a new archetype with remove, ensures that this component is not added
 ---@param include? Component when creating a new archetype with set, add this component to have its value set
-function Entity:update_archetype(exclude, include)
-    local components = self.components
-    local row, old, new = self.row, self.archetype, archetypes[components]
+function update_archetype(entity)
+    local components = entity.components
+    local row, old, new = entity.row, entity.archetype, archetypes[components]
     -- Invariant if the last entity is this one
-    last(old.entities).row = row
-    -- Swap remove out all components
-    -- Note: "entities" is treated like a regular component, and will be included
+    last(old).row = row
     if new then
-        for bit, col in next, old do
-            add(new[bit], swap_remove(col, row))
-        end
-    else -- Create new archetype and add it
-        new = {}
-        for bit, col in next, old do
-            new[bit] = {swap_remove(col, row)}
-        end
+        -- Move entity from old archetype to new
+        add(new, swap_remove(old, row))
+    else
+        -- Create new archetype from old's entity and add it
+        new = {swap_remove(old, row)}
 
-        -- `remove`: Remove falsely added component
-        new[exclude] = nil
-        -- `set`: Ensures the newly set component is included in the archetype
-        if include then new[include] = {} end
-
-        archetypes[components] = new
-        query_cache[components] = new
+        archetypes[components], query_cache[components] = new, new
     end
-    self.archetype = new
-    self.row = #new.entities
-    return self
-end
-
----Sets the value of an entity's component.\
----Important: a component must not be set to nil. Tag support was removed
----@param component Component
----@param value? any
----@return self
-function Entity:set(component, value)
-    if not self.archetype[component] then
-        -- Add the component with bitwise or
-        self.components |= component
-        self:update_archetype(0, value)
-    end
-    return self:rawset(component, value)
-end
-
----Removes a component from an entity.\
----UNSAFE: entity MUST have component
----@param component Component
----@return self
-function Entity:remove(component)
-    self.components ^^= component
-    return self:update_archetype(component)
-end
-
----Replaces one component with another.\
----This is functionally equivalent to calling `remove` followed by `set`, but saves an archetype move.\
----This should never be called with tags.\
----UNSAFE: entity MUST have component, and MUST NOT have with.
----@param component Component the component to replace
----@param with Component the component that's replacing the other one
----@param value? any the value to replace with. If nil, replaces `with` with the value of `component`.
----@return self
-function Entity:replace(component, with, value)
-    value = value or self:get(component)
-    -- Xor remove, or add (requires that `with` is not already present)
-    self.components ^^= component | with
-    return self:update_archetype(component, with):rawset(with, value)
-end
-
----Deletes the entity and all of its components.
-function Entity:delete()
-    self:remove(self.components)
+    entity.archetype = new
+    entity.row = #new
 end
 
 ---Creates a new component identifier.\
 ---Note: Pintity can only handle creating up to 32 components.
----@return Component component
-local function component()
-    ---@type Component doesn't assert when there are more than 32 components
-    component_bit <<>= 1
-    return component_bit
+---@param name string the name of the component
+local function component(name)
+    components[name] = component_bit
+    component_bit <<= 1
 end
 
----Updates the contents of the query to represent the current state of the ECS.
+---Queries match entities with specific components.
+---@param terms string A comma separated string of component names
+---@param exclude? string A comma separated string of component names to exclude
+---@return Archetype[] query Every archetype matched with the query
+local function query(terms)
+    local filter = 0
+    for term in split(terms) do filter |= components[term] end
+
+    local results = { bits = filter }
+
+    update_query(results, archetypes)
+    return results
+end
+
+--- Updates the contents of the query to represent the current state of the ECS.\
+--- Adds new archetypes after they are created
 ---@param query Query
 ---@param tables Archetype[]
-function update_query(query)
-    for bits, archetype in next, query_cache do
+function update_query(query, tables)
+    for bits, archetype in next, tables or query_cache do
         if bits & query.bits == query.bits then
-            local fields = { archetype.entities }
-            for term in all(query.terms) do
-                add(fields, archetype[term])
-            end
-            add(query, fields)
+            add(query, archetype)
         end
     end
 end
@@ -197,25 +148,40 @@ end
 --- Systems are run once per frame, and in the order they are created.\
 --- If a system needs to stop iteration, return `true`.\
 --- Important: if a system needs to delete entities or add new components, it should iterate **in reverse** to prevent entities from being skipped.
----@param terms Component[]
+---@param phase Phase the phase to run this system on
+---@param terms string
 ---@param callback System
-local function system(terms, callback)
-    local filter = 0
-    for term in all(terms) do filter |= term end
-    add(queries, { terms = terms, bits = filter }) -- Removed support for tasks
+---@return Archetype[] query
+local function system(phase, terms, callback)
     add(systems, callback)
+    return add(queries, query(terms, callback))
 end
 
----Progress the ECS each frame. Should be called in `_update`
-function progress()
-    if next(query_cache) then
-        foreach(queries, update_query)
-        -- Clear query cache
-        query_cache = {}
+---Instantiates a new entity from a simple table containing key-value pairs.
+---@param prefab Prefab
+---@return Entity instance
+function instantiate(prefab)
+    local e = entity()
+    -- Copy the prefab's components into the entity instance
+    for k, v in next, prefab do
+        e[k] = v
     end
-    for i, system in inext, systems do
-        for cols in all(queries[i]) do
-            system(unpack(cols))
+    return e
+end
+
+---Runs all systems
+function progress()
+    foreach(queries, update_query)
+    query_cache = {}
+    for i, query in inext, queries do
+        local system = systems[i]
+        for arch in all(query) do
+            -- Note: empty tables are never deleted, so they aren't removed from queries
+            -- Skip empty archetypes
+            if #arch ~= 0 then
+                -- Skip system if it returns true
+                system(arch)
+            end
         end
     end
 end
