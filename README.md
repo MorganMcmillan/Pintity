@@ -1,15 +1,15 @@
 # Pintity: Minimalist ECS For Pico-8
 
-Pintity is a bitset-archetype ECS for Pico-8, meaning that entities and components are represented as bitsets and stored in tables. That also means it's extremely fast and efficient for handling multiple entities
+Pintity is a bitset-archetype ECS for Pico-8, meaning that components are represented by bits and entities are stored into tables. That also means it's efficient for querying lots of entities.
 
 # Features
 
 - Fast and easy to use API
-- Fast archetype SOA storage
+- Simplistic AOS storage that feels just like OOP
 - Extremely fast queries that can be updated automatically
 - Automatic systems that iterate multiple entities at once
 - Prefabs for quick spawning of entities
-- Phases to separate update logic from drawing logic
+- Phases to separate update logic from drawing code
 
 # Usage
 
@@ -24,45 +24,73 @@ local player = entity()
 Components describe data and are added to entities.
 
 ```lua
--- Components can be given default values
-local Position = component({0, 0})
-local Velocity = component()
-local Player = component()
+-- A component is a name that matches to an entity's attribute.
+component"postion"
+component"velocity"
+component"player"
 
-player:set(Position)
-    -- component operations can be chained together
-    :set(Velocity, {1, 2})
--- Tags can be added as components without any data
-    :set(Player)
+-- The attribute name must match the component's name.
+player.position = {0, 0}
+player.velocity = {1, 2}
+-- Tags are simply represented with the boolean true.
+player.player = true
 ```
 
-Systems are functions that are run automatically for all entities that match a query. It iterates over all entities that have the component.
+Systems are functions that are run automatically for all entities that match a query. They iterate over all entities that have the specified components.
 
 ```lua
-local Move = system(OnUpdate, { Position, Velocity }, function(entities, positions, velocities)
-    for i = 1, #entities do
-        positions[i].x += velocities[i].x
-        positions[i].y += velocities[i].y
+-- Systems take in a comma separated string of component names to look for.
+local Move = system(OnUpdate, "position,velocity", function(entities)
+    for e in all(entities) do
+        e.position.x += e.velocity.x
+        e.position.y += e.velocity.y
     end
 end)
 
 -- Tasks are systems without any query, and run only once each frame
 local DisplayPlayer = system(OnUpdate, nil, function()
-    local pos = player:get(Position)
+    local pos = player.position
     print(pos.x, pos.y)
 end)
 ```
 
+Systems return the entities that they are queried for, which allows said query to be used inside the system and updated automatically.
+Here is an example of a collision resolution system.
+
+```lua
+local CheckCollisions = system(OnUpdate, "position, hitbox", function(entities)
+    for e in all(entities) do
+        for arch in all(CheckCollisions) do
+            for other in all(arch) do
+                if is_colliding(e, other) then
+                    resolve_collision(e, other)
+                end
+            end
+        end
+    end
+end)
+```
+
 Systems are then run by calling `progress()` each frame.
+Their queries must be updated by calling `update_phases()` within `_update` before progress is called.
 
 ```lua
 function _update60()
+    -- Update all system queries
+    update_phases()
     -- Run systems at 60fps
-    progress()
+    progress(OnUpdate)
 end
 ```
 
 # API
+
+## `component(name)`
+
+Creates a new named component.
+
+> [!WARNING]
+> Because Pintity is a bitset-based ECS, and Pico-8 only allows 32-bit numbers, the maximum amount of components that can be created is 32. A *component* is just an integer with a single bit set to 1.
 
 ## `entity() -> Entity`
 
@@ -70,65 +98,33 @@ Spawns a new *entity*. *Entities* are objects that can have an arbitrary amount 
 
 Pintity implements **entity recycling**, which means entities that have been deleted will have their data reused to save memory. This means that you should never call `entity` twice without adding at least one *component*.
 
-### `Entity:get(component) -> value|nil`
-
-Gets the value of an entity's *component*, or `nil` if it doesn't have it.
-
-### `Entity:has(component) -> boolean`
-
-Whether or not the entity has the specified component. Returns true even for tags.
-
-### `Entity:alive() -> boolean`
-
-Whether or not the entity is alive. An entity is dead if it has no components, either through being newly made, `remove`ing all components, or after calling `delete`.
-
-### `Entity:set(component, [value]) -> self`
-
-Sets the value of the entity's *component*, and adds it if it didn't already have it. Can be chained.
-
-If value is not given, it either defaults to the *component's* value, or the *component* is treated as a *tag*.
-
-### `Entity:rawset(component, value) -> self`
-
-Sets the value of the entity's *component* without checking for it. This should **ONLY** ever be used for overriding prefab values or in systems that match the specified component.
-
-### `Entity:remove(component) -> self`
-
-Removes the *component* from the entity. Can be chained.
-
-### `Entity:replace(component, with, [value]) -> self`
-
-Replaces a *component* with another *component*, setting either to `value` or the value of the previous *component*. Can be chained.
-
-This is the same as calling `remove` followed by `set`, but is more efficient.
-
-### `Entity:delete()`
-
 Deletes all data from the entity and makes it not alive. Deleted entities will be made available for recycling.
 
-## `component([default]) -> Component`
+### Setting Component Values
 
-Creates a new *component* identifier. Components represent data that can be added to an *entity*, and are matched by *queries* and *systems*.
+TODO
 
-*Components* can be used as *tags* by not specifying any default value and never calling `entity:set` with a value. Components and tags **cannot be mixed**.
+### Getting Component Values
 
-> [!WARNING]
-> Because Pintity is a bitset-based ECS, and Pico-8 only allows 32-bit numbers, the maximum amount of components that can be created is 32. A *component* is just an integer with a single bit set to 1.
+### Deleting Components and Entities
 
-## `system(phase, terms, [exclude,] callback(entities, ...) -> skip: boolean) -> callback`
+### 
+
+
+## `system(phase, terms, [exclude,] callback(entities) -> skip: boolean) -> Query`
 
 Systems are functions that are ran for each entity in bulk. Systems within the same *phase* are ran in the order they are declared.
 
 `terms` and `exclude` are a list of components to include and exclude, respectively. They are the same kind that are passed to `query`, which this function calls internally.
 
-`callback` receives a list of *entities*, followed by lists of *component values* associated with each entity, in the order they are specified in `terms`. System code should iterate over each entity's index, and fetch the value of each component at that index.
+`callback` receives a list of *entities*, each guarenteed to have the component they are queried for, and not the ones that are excluded.
 
 Example:
 ```lua
-local Move = system(OnUpdate, { Position, Velocity }, function(entities, positions, velocities)
-    for i = 1, #entities do
-        positions[i].x += velocities[i].x
-        positions[i].y += velocities[i].y
+local Move = system(OnUpdate, "position,velocity", function(entities)
+    for e in all(entities) do
+        e.position.x += e.velocity.x
+        e.position.y += e.velocity.y
     end
 end)
 ```
@@ -139,7 +135,7 @@ Returns list of each archetype matching `terms` that doesn't match any `exclude`
 
 ## `phase() -> Phase`
 
-Creates a new phase. Phases contain both queries and systems, and are all updated via `update_phases`.
+Creates a new phase. Phases contain both queries and systems, and are all updated via `update_phases` once per frame.
 
 Phases were created to address Pico-8's division of the game loop into *update* and *draw* functions.
 
@@ -168,15 +164,15 @@ function _draw()
 end
 ```
 
-## `prefab(component, value, component, value, ...) -> Prefab`
+## `prefab{component: value, ...) -> Prefab`
 
-A prefab allows for the efficient creation of entities with many components and values. Tags can be included by passing `nil` as their value.
+A prefab allows for the efficient creation of entities with many components and values.
 
-Prefab entities can then be created with `instantiate`.
+Prefab entities can be created with `instantiate`.
 
 Example:
 ```lua
-local Circle = prefab(Position, { 0, 0 }, Color, 8, Radius, 4, IsShape, nil)
+local Circle = prefab{position = { 0, 0 }, color = 8, radius = 4, is_shape = true}
 ```
 
 ## `instantiate(prefab) -> Entity`
@@ -185,13 +181,16 @@ Creates an *entity* from a *prefab*. The entity will have the *components* and v
 
 Example:
 ```lua
-local e = instantiate(Circle):rawset(Position, { 64, 64 })
+local e = instantiate(circle)
+circle.postion = { 64, 64 }
 ```
-
 
 # Lite Version
 
 Pintity offers a lite version for the token-conscious. It removes certain features and has worse performance in exchange for a token count of ~450.
+
+> [!Important]
+> The current version of Pintity-Lite has not yet caught up to the full version's changes.
 
 ## Changes and Removed Features
 

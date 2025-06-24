@@ -36,7 +36,7 @@ components = {}
 --- @type Phase[]
 phases = {}
 
-local pint_mt = {}
+pint_mt = {}
 
 -- Used to add a new component
 function pint_mt:__newindex(name, value)
