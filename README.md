@@ -30,8 +30,8 @@ component"velocity"
 component"player"
 
 -- The attribute name must match the component's name.
-player.position = {0, 0}
-player.velocity = {1, 2}
+player.position = { x = 0, y = 0 }
+player.velocity = { x = 1, y = 2 }
 -- Tags are simply represented with the boolean true.
 player.player = true
 ```
@@ -109,7 +109,7 @@ Example:
 component"position"
 
 local e = entity()
-e.position = { 64, 64 }
+e.position = { x = 64, y = 64 }
 ```
 
 Entities have a special `__newindex` metamethod that checks if the key matches any component's name, and if it does then the entity will be available to be queried.
