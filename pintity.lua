@@ -129,13 +129,13 @@ end
 ---@return Archetype[] query Every archetype matched with the query
 local function query(terms, exclude)
     local filter = 0
-    for term in split(terms) do filter |= components[term] end
+    for term in all(split(terms)) do filter |= components[term] end
 
     local results = { bits = filter, exclude = 0 }
 
     if exclude then
         filter = 0
-        for excludeTerm in split(exclude) do filter |= components[excludeTerm] end
+        for excludeTerm in all(split(exclude)) do filter |= components[excludeTerm] end
         results.exclude = filter
     end
 
@@ -205,7 +205,7 @@ function prefab(t)
     if not archetypes[bits] then
         archetypes[bits], query_cache[bits] = new, new
     end
-    t.bits = bits
+    t.components, t.archetype = bits, archetypes[bits]
     return t
 end
 
@@ -214,12 +214,13 @@ end
 ---@param prefab Prefab
 ---@return Entity instance
 function instantiate(prefab)
-    local e, arch = {}, archetypes[prefab.bits]
+    local e = {}
     -- Copy the prefab's components into the entity instance
     for k, v in next, prefab do
         e[k] = v
     end
-    add(e, arch).row = #arch
+
+    add(e.archetype, e).row = #e.archetype
     return setmetatable(e, pint_mt)
 end
 
