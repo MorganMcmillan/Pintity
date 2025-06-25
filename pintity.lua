@@ -1,8 +1,8 @@
 -- Pintity: a stupid simple ECS for Pico-8
 -- By Morgan.
 
--- 545 tokens compressed
--- 188 tokens less than 1.0.0 (733 tokens)
+-- 502 tokens compressed
+-- 231 tokens less than 1.0.0 (733 tokens)
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
@@ -54,10 +54,15 @@ end
 -- Note: component data is not actually removed, but it should never be accessed.
 function pint_mt:__call(name)
     if name then
+        printh("Removing component: " .. name)
         -- Remove just one component
         self.components ^^= components[name]
+        self[name] = nil
     else
         -- Remove all components.
+        for k in next, self do
+            if components[k] then self[k] = nil end
+        end
         self.components = 0
     end
     update_archetype(self)
@@ -92,10 +97,7 @@ function swap_remove(t, i)
     return i
 end
 
----Changes the archetype of an entity.\
----This is a low-level operation that is not meant to be used directly. Instead use `set`, `remove` or `replace`
----@param exclude Component when creating a new archetype with remove, ensures that this component is not added
----@param include? Component when creating a new archetype with set, add this component to have its value set
+---Changes the archetype of an entity.
 function update_archetype(entity)
     local components = entity.components
     local row, old, new = entity.row, entity.archetype, archetypes[components]

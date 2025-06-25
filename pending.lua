@@ -1,31 +1,22 @@
----Progress the ECS each frame. Should be called in `_update`
-function progress_each()
-    if next(query_cache) then
-        foreach(queries, update_query)
-        -- The archetypes are no longer new this frame
-        query_cache = {}
-    end
-    for i, system in inext, systems do
-        for cols in all(queries[i]) do
-            -- Note: empty tables are never deleted, so they aren't removed from queries
-            -- Skip empty archetypes
-            for j = #cols[1], 1, -1 do
-                local values = {}
-                for k = 1, #cols do
-                    values[k] = cols[k][j]
-                end
-                system(unpack(values))
-            end
-        end
-    end
-end
-
 ---Clones an entity.
 ---@return Entity
-function Entity:clone()
-    local clone = entity():set(self.components)
-    for bit, value in next, self.archetype do
-        clone:rawset(bit, value)
+function clone(entity)
+    local clone = {}
+    for k, v in next, entity do
+        clone[k] = v
     end
-    return clone:rawset("entities", clone)
+    add(entity.archetype, clone).row = #entity.archetype
+    return setmetatable(clone, pint_mt)
+end
+
+---Garbage collects all empty archetypes created this frame.
+---Recently empty tables are ignored because they are likely to be filled again,
+---and removing tables from cached queries would be a pain.
+---This must be called before `update_phases` is called in `_update`
+function clean_tables()
+    for bits, archetype in next, query_cache do
+        if #archetype == 0 then
+            query_cache[bits], archetypes[bits] = nil
+        end
+    end
 end

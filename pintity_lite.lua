@@ -29,7 +29,7 @@ query_cache = {}
 --- @type Component
 --- The current component ID\
 --- Pico-8 uses 32-bit fixed point numbers, so `1` is actually bit 16
-component_bit = 1 >> 16
+component_bit = 1
 
 --- @type { string: Component }
 components = {}
@@ -88,10 +88,7 @@ function swap_remove(t, i)
     return i
 end
 
----Changes the archetype of an entity.\
----This is a low-level operation that is not meant to be used directly. Instead use `set`, `remove` or `replace`
----@param exclude Component when creating a new archetype with remove, ensures that this component is not added
----@param include? Component when creating a new archetype with set, add this component to have its value set
+---Changes the archetype of an entity.
 function update_archetype(entity)
     local components = entity.components
     local row, old, new = entity.row, entity.archetype, archetypes[components]
@@ -115,16 +112,15 @@ end
 ---@param name string the name of the component
 local function component(name)
     components[name] = component_bit
-    component_bit <<= 1
+    component_bit <<>= 1
 end
 
 ---Queries match entities with specific components.
 ---@param terms string A comma separated string of component names
----@param exclude? string A comma separated string of component names to exclude
 ---@return Archetype[] query Every archetype matched with the query
 local function query(terms)
     local filter = 0
-    for term in split(terms) do filter |= components[term] end
+    for term in all(split(terms)) do filter |= components[term] end
 
     local results = { bits = filter }
 
