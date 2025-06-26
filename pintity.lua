@@ -1,8 +1,8 @@
 -- Pintity: a stupid simple ECS for Pico-8
 -- By Morgan.
 
--- 528 tokens compressed
--- 205 tokens less than 1.0.0 (733 tokens)
+-- 497 tokens compressed
+-- 236 tokens less than 1.0.0 (733 tokens)
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
@@ -51,31 +51,25 @@ end
 
 -- Used to delete a value from an entity. This may look strange, but it actually saves 2 tokens.
 -- If name is not given, then the entity is deleted.
--- Note: component data is not actually removed, but it should never be accessed.
 function pint_mt:__call(name)
     if name then
-        printh("Removing component: " .. name)
         -- Remove just one component
         self.components ^^= components[name]
+        update_archetype(self)
         self[name] = nil
     else
-        -- Remove all components.
-        for k in next, self do
-            if components[k] then self[k] = nil end
-        end
-        self.components = 0
+        -- Remove self from archetype
+        local archetype, row = self.archetype, self.row
+        swap_remove(archetype, row)
+        archetype[row].row = row
     end
-    update_archetype(self)
 end
 
----Creates a new entity.\
----Entities with no components may be recycled, so this should never be called twice before adding a component.
+---Creates a new entity.
 ---@return Entity
 function entity()
-    -- Recycle unused entities
-    return last(arch0) or setmetatable(
-        -- Row is known to be 1, as arch0 is empty
-        add(arch0, { archetype = arch0, components = 0, row = 1 }),
+    return setmetatable(
+        add(arch0, { archetype = arch0, components = 0, row = #arch0 + 1 }),
         pint_mt
     )
 end
@@ -87,28 +81,26 @@ function alive(e)
     return e.components ~= 0
 end
 
--- Returns the last item of the table
-function last(t) return t[#t] end
-
 -- Removes the item at i and swaps its value with the last value
 function swap_remove(t, i)
-    i, t[i] = t[i], last(t)
+    t[i] = t[#t]
     deli(t)
-    return i
 end
 
 ---Changes the archetype of an entity.
 function update_archetype(entity)
-    local components = entity.components
-    local row, old, new = entity.row, entity.archetype, archetypes[components]
+    local components, row, old = entity.components, entity.row, entity.archetype
+    local new = archetypes[components]
+
+    swap_remove(old, row)
     -- Invariant if the last entity is this one
-    last(old).row = row
+    old[row].row = row
     if new then
         -- Move entity from old archetype to new
-        add(new, swap_remove(old, row))
+        add(new, entity)
     else
         -- Create new archetype from old's entity and add it
-        new = {swap_remove(old, row)}
+        new = {entity}
 
         archetypes[components], query_cache[components] = new, new
     end

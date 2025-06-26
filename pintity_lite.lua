@@ -3,7 +3,7 @@
 
 -- This version removes a lot of features and safety checks that the full version has.
 
--- 341 tokens compressed
+-- 338 tokens compressed
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
@@ -59,21 +59,20 @@ function pint_mt:__call(name)
     if name then
         -- Remove just one component
         self.components ^^= components[name]
+        update_archetype(self)
     else
-        -- Remove all components.
-        self.components = 0
+        -- Remove self from archetype
+        local archetype, row = self.archetype, self.row
+        swap_remove(archetype, row)
+        archetype[row].row = row
     end
-    update_archetype(self)
 end
 
----Creates a new entity.\
----Entities with no components may be recycled, so this should never be called twice before adding a component.
+---Creates a new entity.
 ---@return Entity
 function entity()
-    -- Recycle unused entities
-    return last(arch0) or setmetatable(
-        -- Row is known to be 1, as arch0 is empty
-        add(arch0, { archetype = arch0, components = 0, row = 1 }),
+    return setmetatable(
+        add(arch0, { archetype = arch0, components = 0, row = #arch0 + 1 }),
         pint_mt
     )
 end
@@ -83,23 +82,24 @@ function last(t) return t[#t] end
 
 -- Removes the item at i and swaps its value with the last value
 function swap_remove(t, i)
-    i, t[i] = t[i], last(t)
+    t[i] = last(t)
     deli(t)
-    return i
 end
 
 ---Changes the archetype of an entity.
 function update_archetype(entity)
-    local components = entity.components
-    local row, old, new = entity.row, entity.archetype, archetypes[components]
+    local components, row, old = entity.components, entity.row, entity.archetype
+    local new = archetypes[components]
+
+    swap_remove(old, row)
     -- Invariant if the last entity is this one
-    last(old).row = row
+    old[row].row = row
     if new then
         -- Move entity from old archetype to new
-        add(new, swap_remove(old, row))
+        add(new, entity)
     else
         -- Create new archetype from old's entity and add it
-        new = {swap_remove(old, row)}
+        new = {entity}
 
         archetypes[components], query_cache[components] = new, new
     end
@@ -170,14 +170,6 @@ function progress()
     foreach(queries, update_query)
     query_cache = {}
     for i, query in inext, queries do
-        local system = systems[i]
-        for arch in all(query) do
-            -- Note: empty tables are never deleted, so they aren't removed from queries
-            -- Skip empty archetypes
-            if #arch ~= 0 then
-                -- Skip system if it returns true
-                system(arch)
-            end
-        end
+        foreach(query, systems[i])
     end
 end
