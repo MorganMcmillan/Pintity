@@ -154,3 +154,11 @@ test("phases update correctly", function ()
     update_phases()
     progress(on_test)
 end)
+
+test("component adds with nil", function ()
+    component"foo"
+
+    local e = entity()
+    e.foo = nil
+    eq(e.components, components.foo)
+end)
