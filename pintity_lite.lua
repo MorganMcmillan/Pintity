@@ -3,7 +3,7 @@
 
 -- This version removes a lot of features and safety checks that the full version has.
 
--- 323 tokens compressed
+-- 305 tokens compressed
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
@@ -63,8 +63,7 @@ function pint_mt:__call(name)
     else
         -- Remove self from archetype
         local archetype, row = self.archetype, self.row
-        swap_remove(archetype, row)
-        archetype[row].row = row
+        swap_remove_entity(archetype, row)
     end
 end
 
@@ -77,23 +76,20 @@ function entity()
     )
 end
 
--- Returns the last item of the table
-function last(t) return t[#t] end
-
--- Removes the item at i and swaps its value with the last value
-function swap_remove(t, i)
-    t[i] = last(t)
-    deli(t)
+-- Removes the entity at i and swaps it with the last entity
+function swap_remove_entity(archetype, row)
+    archetype[row] = archetype[#archetype]
+    archetype[row].row = row
+    deli(archetype)
 end
 
 ---Changes the archetype of an entity.
 function update_archetype(entity)
-    local components, row, old = entity.components, entity.row, entity.archetype
+    local components = entity.components
     local new = archetypes[components]
 
-    swap_remove(old, row)
     -- Invariant if the last entity is this one
-    old[row].row = row
+    swap_remove_entity(entity.archetype, entity.row)
     if new then
         -- Move entity from old archetype to new
         add(new, entity)
