@@ -62,8 +62,7 @@ function pint_mt:__call(name)
         update_archetype(self)
     else
         -- Remove self from archetype
-        local archetype, row = self.archetype, self.row
-        swap_remove_entity(archetype, row)
+        swap_remove_entity(self.archetype, self.row)
     end
 end
 
@@ -76,7 +75,7 @@ function entity()
     )
 end
 
--- Removes the entity at i and swaps it with the last entity
+-- Removes the entity at row swaps it with the last entity
 function swap_remove_entity(archetype, row)
     archetype[row] = archetype[#archetype]
     archetype[row].row = row

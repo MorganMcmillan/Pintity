@@ -61,11 +61,11 @@ end
 
 -- Then in __draw
 
-for i = 1, 4 do
-    _map_display(i - 1)
+for i = 0, 3 do
+    _map_display(i)
     -- There will likely be an actual camera implementation
     camera_x, camera_y = 128 * (i & 1), 128 * (i >> 1)
-    progress(on_screen_phases[i])
+    progress(on_screen_phases[i + 1])
 end
 
--- And then the draw phases can be called as normal
+-- And then the other draw phases can be called as normal

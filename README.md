@@ -21,7 +21,7 @@ Entities are objects with any number of components.
 local player = entity()
 ```
 
-Components describe data and are added to entities.
+Components describe data and are added to entities. Components without data are called tags.
 
 ```lua
 -- A component is a name that matches to an entity's attribute.
@@ -32,8 +32,9 @@ component"player"
 -- The attribute name must match the component's name.
 player.position = { x = 0, y = 0 }
 player.velocity = { x = 1, y = 2 }
--- Tags are simply represented with the boolean true.
-player.player = true
+-- Nil is seen as a valid value for components,
+-- in which case the component is used as a tag.
+player.player = nil
 ```
 
 Systems are functions that are run automatically for all entities that match a query. They iterate over all entities that have the specified components.
@@ -50,7 +51,7 @@ end)
 -- Tasks are systems without any query, and run only once each frame
 local DisplayPlayer = system(OnUpdate, nil, function()
     local pos = player.position
-    print(pos.x, pos.y)
+    print(pos.x.." "..pos.y)
 end)
 ```
 

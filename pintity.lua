@@ -56,11 +56,11 @@ function pint_mt:__call(name)
         -- Remove just one component
         self.components ^^= components[name]
         update_archetype(self)
-        self[name] = nil
+        -- Used to prevent tags from being re-added
+        rawset(self, name, nil)
     else
         -- Remove self from archetype
-        local archetype, row = self.archetype, self.row
-        swap_remove_entity(archetype, row)
+        swap_remove_entity(self.archetype, self.row)
     end
 end
 
@@ -80,7 +80,7 @@ function alive(e)
     return e.components ~= 0
 end
 
--- Removes the entity at i and swaps it with the last entity
+-- Removes the entity at row swaps it with the last entity
 function swap_remove_entity(archetype, row)
     archetype[row] = archetype[#archetype]
     archetype[row].row = row
