@@ -246,11 +246,12 @@ This can be useful for handling multiple scenes or when a specific piece of logi
 
 # Lite Version
 
-Pintity offers a lite version for the token-conscious. It removes certain features and has worse performance in exchange for a token count of ~340.
+Pintity offers a lite version for the token-conscious. It removes certain features and has worse performance in exchange for a token count of ~300.
 
 ## Changes and Removed Features
 
 - `component` doesn't check if more than 32 components have been made
+- Garbage component values are not deleted when components are removed
 - `system` no longer takes an `exclude` parameter
 - Removed `phase` and phases
     - Lite opts to use a global phase for all systems, intended to be progressed in `_update`
