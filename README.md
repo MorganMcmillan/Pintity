@@ -214,7 +214,7 @@ Creates an *entity* from a *prefab*. The entity will have the *components* and v
 Example:
 ```lua
 local e = instantiate(circle)
-circle.postion = { 64, 64 }
+circle.position = { 64, 64 }
 ```
 
 # Tips and Tricks
