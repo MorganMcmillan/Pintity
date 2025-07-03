@@ -3,13 +3,13 @@
 
 -- This version removes a lot of features and safety checks that the full version has.
 
--- 300 tokens compressed
+-- 307 tokens compressed
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
 --- @alias Component integer a singular bit identifying a component
 --- @class ComponentSet integer bitset of components
---- @alias System fun(entities: Entity[], ...: any[]) -> skip?: boolean
+--- @alias System fun(entity: Entity)
 --- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
 --- @alias Archetype Entity[]
 --- @class Prefab { [string]: any }
@@ -165,6 +165,8 @@ function progress()
     foreach(queries, update_query)
     query_cache = {}
     for i, query in inext, queries do
-        foreach(query, systems[i])
+        for arch in all(query) do
+            foreach(arch, systems[i])
+        end
     end
 end

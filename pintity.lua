@@ -1,14 +1,14 @@
 -- Pintity: a stupid simple ECS for Pico-8
 -- By Morgan.
 
--- 482 tokens compressed
--- 251 tokens less than 1.0.0 (733 tokens)
+-- 488 tokens compressed
+-- 245 tokens less than 1.0.0 (733 tokens)
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
 --- @alias Component integer a singular bit identifying a component
 --- @class ComponentSet integer bitset of components
---- @alias System fun(entities: Entity[]) -> skip?: boolean
+--- @alias System fun(entity: Entity) -> skip?: boolean
 --- @class Phase { [integer]: Query, systems: System[] }
 --- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
 --- @alias Archetype Entity[]
@@ -223,12 +223,12 @@ function progress(phase)
     for i, query in inext, phase do
         local system = phase.systems[i]
         for arch in all(query) do
-            -- Note: empty tables are never deleted, so they aren't removed from queries
-            -- Skip empty archetypes
-            if #arch ~= 0 then
+            -- Iterates in reverse to allow moving and deletion of entities
+            for j = #arch, 1, -1 do
                 -- Skip system if it returns true
-                if system(arch) then break end
+                if system(arch[j]) then goto sys_skip end
             end
+            ::sys_skip::
         end
     end
 end
