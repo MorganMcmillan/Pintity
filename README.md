@@ -41,11 +41,9 @@ Systems are functions that are run automatically for all entities that match a q
 
 ```lua
 -- Systems take in a comma separated string of component names to look for.
-local Move = system(OnUpdate, "position,velocity", function(entities)
-    for e in all(entities) do
-        e.position.x += e.velocity.x
-        e.position.y += e.velocity.y
-    end
+local Move = system(OnUpdate, "position,velocity", function(e)
+    e.position.x += e.velocity.x
+    e.position.y += e.velocity.y
 end)
 
 -- Tasks are systems without any query, and run only once each frame
@@ -59,13 +57,11 @@ Systems return the entities that they are queried for, which allows said query t
 Here is an example of a collision resolution system.
 
 ```lua
-local CheckCollisions = system(OnUpdate, "position, hitbox", function(entities)
-    for e in all(entities) do
-        for arch in all(CheckCollisions) do
-            for other in all(arch) do
-                if is_colliding(e, other) then
-                    resolve_collision(e, other)
-                end
+local CheckCollisions = system(OnUpdate, "position, hitbox", function(e)
+    for arch in all(CheckCollisions) do
+        for other in all(arch) do
+            if is_colliding(e, other) then
+                resolve_collision(e, other)
             end
         end
     end
@@ -143,21 +139,19 @@ This syntax can also be used to delete all components from an entity. Simply cal
 e()
 ```
 
-## `system(phase, terms, [exclude,] callback(entities) -> skip: boolean) -> Query`
+## `system(phase, terms, [exclude,] callback(entity) -> skip: boolean) -> Query`
 
 Systems are functions that are ran for each entity in bulk. Systems within the same *phase* are ran in the order they are declared.
 
 `terms` and `exclude` are a list of components to include and exclude, respectively. They are the same kind that are passed to `query`, which this function calls internally.
 
-`callback` receives a list of *entities*, each guaranteed to have the component they are queried for, and not the ones that are excluded.
+`callback` receives an *entity* guaranteed to have the component that is queried for, and is never given one that doesn't have it.
 
 Example:
 ```lua
-local Move = system(OnUpdate, "position,velocity", function(entities)
-    for e in all(entities) do
-        e.position.x += e.velocity.x
-        e.position.y += e.velocity.y
-    end
+local Move = system(OnUpdate, "position,velocity", function(e)
+    e.position.x += e.velocity.x
+    e.position.y += e.velocity.y
 end)
 ```
 
