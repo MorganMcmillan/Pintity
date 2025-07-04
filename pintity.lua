@@ -1,8 +1,8 @@
 -- Pintity: a stupid simple ECS for Pico-8
 -- By Morgan.
 
--- 482 tokens compressed
--- 251 tokens less than 1.0.0 (733 tokens)
+-- 484 tokens compressed
+-- 249 tokens less than 1.0.0 (733 tokens)
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
@@ -20,6 +20,9 @@ arch0 = {}
 
 --- @type { ComponentSet: Archetype }
 archetypes = {[0] = arch0}
+
+--- @type Query[]
+cached_queries = {}
 
 --- @type { ComponentSet: Archetype }
 --- New archetypes created this frame to update queries by.\
@@ -136,12 +139,19 @@ local function query(terms, exclude)
     return results
 end
 
+---Cached queries are queries that are updated at the start of every call to _update with `
+---@param terms string A comma separated string of component names
+---@param exclude? string A comma separated string of component names to exclude
+---@return Archetype[] query Every archetype matched with the query
+local function cached_query(terms, exclude)
+    return add(cached_queries, query(terms, exclude))
+end
+
 --- Updates the contents of the query to represent the current state of the ECS.\
 --- Adds new archetypes after they are created
 ---@param query Query
 ---@param tables Archetype[]
 function update_query(query, tables)
-    if not query.bits then return end
     for bits, archetype in next, tables or query_cache do
         if bits & query.bits == query.bits
         and bits & query.exclude == 0 then
@@ -161,11 +171,7 @@ end
 
 --- Automatically updates all phases. Must be called in `_update` before any `progress` is called.
 function update_phases()
-    if next(query_cache) then
-        for phase in all(phases) do
-            foreach(phase, update_query)
-        end
-    end
+    foreach(cached_queries, update_query)
     query_cache = {}
 end
 
@@ -180,7 +186,7 @@ end
 ---@return Archetype[] query
 local function system(phase, terms, exclude, callback)
     add(phase.systems, callback or exclude)
-    return add(phase, terms and query(terms, callback and exclude) or {{0}}) -- Empty table to ensure iteration
+    return add(phase, terms and cached_query(terms, callback and exclude) or {{0}}) -- Empty table to ensure iteration
 end
 
 ---Creates a new prefab. A prefab is a template for an entity, like a blueprint.\
@@ -189,7 +195,7 @@ end
 ---@return any
 function prefab(t)
     local bits, new = 0, {}
-    for k, v in next, t do
+    for k in next, t do
         local bit = components[k]
         if bit then
             bits |= bit

@@ -20,3 +20,11 @@ function clean_tables()
         end
     end
 end
+
+---Deletes every entity matching a query
+---@param query Query
+function delete_queried(query)
+    for i = 1, #query do
+        query[i] = {}
+    end
+end
