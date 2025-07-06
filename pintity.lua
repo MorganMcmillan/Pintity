@@ -1,8 +1,8 @@
 -- Pintity: a stupid simple ECS for Pico-8
 -- By Morgan.
 
--- 484 tokens compressed
--- 249 tokens less than 1.0.0 (733 tokens)
+-- 483 tokens compressed
+-- 250 tokens less than 1.0.0 (733 tokens)
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
@@ -171,8 +171,10 @@ end
 
 --- Automatically updates all phases. Must be called in `_update` before any `progress` is called.
 function update_phases()
-    foreach(cached_queries, update_query)
-    query_cache = {}
+    if next(query_cache) then
+        foreach(cached_queries, update_query)
+        query_cache = {}
+    end
 end
 
 --- Create and add a new system.\
