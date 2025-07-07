@@ -1,8 +1,8 @@
 -- Pintity: a stupid simple ECS for Pico-8
 -- By Morgan.
 
--- 474 tokens compressed
--- 259 tokens less than 1.0.0 (733 tokens)
+-- 578 tokens compressed
+-- 155 tokens less than 1.0.0 (733 tokens)
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
