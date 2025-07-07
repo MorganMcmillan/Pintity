@@ -37,6 +37,9 @@ component_bit = 1 >> 16
 --- @type { string: Component }
 components = {}
 
+--- @type { string: Component }
+exclusive_components = {}
+
 --- @type Phase[]
 phases = {}
 
@@ -44,8 +47,17 @@ pint_mt = {}
 
 -- Used to add a new component
 function pint_mt:__newindex(name, value)
-    local bit = components[name]
+    local bit, group = components[name], exclusive_components[name]
     if bit then
+        if group then
+            local exclusive = self[group]
+            if exclusive then
+                self.components &= group
+                rawset(self, exclusive, nil)
+            else
+                rawset(self, group, name)
+            end
+        end
         self.components |= bit
         update_archetype(self)
     end
@@ -61,6 +73,11 @@ function pint_mt:__call(name)
         update_archetype(self)
         -- Used to prevent tags from being re-added
         rawset(self, name, nil)
+
+        local group = exclusive_components[name]
+        if group then
+            rawset(self, group, nil)
+        end
     else
         -- Remove self from archetype
         swap_remove_entity(self.archetype, self.row)
@@ -110,6 +127,21 @@ local function component(name)
     assert(component_bit ~= 0, "Error: component limit reached. Applications can only have up to 32 components.")
     components[name] = component_bit
     component_bit <<= 1
+end
+
+local function exclusive(group)
+    local group, old_component_bit, bits = split(group), component_bit, component_bit
+    for component in all(group) do
+        components[component] = bits
+        bits += old_component_bit
+    end
+    while component_bit < bits do
+        component_bit <<= 1
+    end
+    local group_bits = ~(component_bit - .00002 ^^ old_component_bit - .00002)
+    for component in all(group) do
+        exclusive_components[component] = group_bits
+    end
 end
 
 ---Queries match entities with specific components.
