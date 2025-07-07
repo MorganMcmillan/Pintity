@@ -129,6 +129,10 @@ local function component(name)
     component_bit <<= 1
 end
 
+---Creates a group of exclusive components. An exclusive component is one which belongs to a group and may only have one in its group added to an entities.
+---This allows more than 32 components to be used in an application.
+---The ideal size of an exclusive group is any power of 2 minus 1.
+---@param group string A comma separated string of component names.
 local function exclusive(group)
     local group, old_component_bit, bits = split(group), component_bit, component_bit
     for component in all(group) do
