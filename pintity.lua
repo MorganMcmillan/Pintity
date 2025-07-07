@@ -1,8 +1,8 @@
 -- Pintity: a stupid simple ECS for Pico-8
 -- By Morgan.
 
--- 483 tokens compressed
--- 250 tokens less than 1.0.0 (733 tokens)
+-- 474 tokens compressed
+-- 259 tokens less than 1.0.0 (733 tokens)
 
 --- Type definitions:
 --- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
@@ -74,13 +74,6 @@ function entity()
         add(arch0, { archetype = arch0, components = 0, row = #arch0 + 1 }),
         pint_mt
     )
-end
-
----Checks if an entity is alive.\
----Note: an entity is not considered alive until it has at least one (fragmenting) component
----@return boolean
-function alive(e)
-    return e.components ~= 0
 end
 
 -- Removes the entity at row swaps it with the last entity
