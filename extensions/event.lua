@@ -34,20 +34,20 @@ function emit(event, entity, ...)
     local components = entity.components
     -- Get cached handlers
     local handlers = event[components]
-    if handlers then
-        for i = 1, #handlers do
-            handlers[i](entity, ...)
-        end
-    else
-        -- Manually match and cache handlers
-        local callbacks, exclusions, handlers = event.callbacks, event.exclusions {}
+    if not handlers then
+        handlers = {}
+        -- Manually match event handlers
+        local callbacks, exclusions = event.callbacks, event.exclusions
         for i, terms in inext, event.terms do
             if components & terms == terms
             and components & exclusions[i] == 0 then
-                add(handlers, callbacks[i])(entity, ...)
+                add(handlers, callbacks[i])
             end
         end
         -- Cache event handlers
         event[components] = handlers
+    end
+    for i = 1, #handlers do
+        handlers[i](entity, ...)
     end
 end
