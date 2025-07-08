@@ -6,13 +6,13 @@
 -- 300 tokens compressed
 
 --- Type definitions:
---- @class Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
+--- @alias Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
 --- @alias Component integer a singular bit identifying a component
---- @class ComponentSet integer bitset of components
+--- @alias ComponentSet integer bitset of components
 --- @alias System fun(entities: Entity[], ...: any[]) -> skip?: boolean
 --- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
 --- @alias Archetype Entity[]
---- @class Prefab { [string]: any }
+--- @alias Prefab { [string]: any }
 
 --- @type Archetype
 --- The archetype containing no components. Used for recycling.
