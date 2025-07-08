@@ -112,24 +112,20 @@ local function component(name)
     component_bit <<= 1
 end
 
+function or_terms(terms)
+    local bits = 0
+    if terms then
+        for term in all(split(terms)) do bits |= components[term] end
+    end
+    return bits
+end
+
 ---Queries match entities with specific components.
 ---@param terms string A comma separated string of component names
 ---@param exclude? string A comma separated string of component names to exclude
 ---@return Archetype[] query Every archetype matched with the query
 local function query(terms, exclude)
-    local filter = 0
-    for term in all(split(terms)) do filter |= components[term] end
-
-    local results = { bits = filter, exclude = 0 }
-
-    if exclude then
-        filter = 0
-        for excludeTerm in all(split(exclude)) do filter |= components[excludeTerm] end
-        results.exclude = filter
-    end
-
-    update_query(results, archetypes)
-    return results
+    return update_query({ bits = or_terms(terms), exclude = or_terms(exclude) }, archetypes)
 end
 
 ---Cached queries are queries that are updated at the start of every call to _update with `
@@ -151,6 +147,7 @@ function update_query(query, tables)
             add(query, archetype)
         end
     end
+    return query
 end
 
 ---Creates a new phase. Systems can be added to phases.\
