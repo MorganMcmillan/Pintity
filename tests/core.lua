@@ -1,5 +1,6 @@
 #include test.lua
 #include ../pintity.lua
+#include ../extensions/prefab.lua
 
 -- Resets the state of the ECS
 function reset_fn()

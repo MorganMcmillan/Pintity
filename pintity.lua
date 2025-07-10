@@ -1,8 +1,8 @@
 -- Pintity: a stupid simple ECS for Pico-8
 -- By Morgan.
 
--- 461 tokens compressed
--- 272 tokens less than 1.0.0 (733 tokens)
+-- 375 tokens compressed
+-- 358 tokens less than 1.0.0 (733 tokens)
 
 --- Type definitions:
 --- @alias Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
@@ -12,7 +12,6 @@
 --- @alias Phase { [integer]: Query, systems: System[] }
 --- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
 --- @alias Archetype Entity[]
---- @alias Prefab { bits: ComponentSet, [string]: any }
 
 --- @type Archetype
 --- The archetype containing no components. Used for recycling.
@@ -179,40 +178,6 @@ end
 local function system(phase, terms, exclude, callback)
     add(phase.systems, callback or exclude)
     return add(phase, terms and cached_query(terms, callback and exclude) or {{0}}) -- Empty table to ensure iteration
-end
-
----Creates a new prefab. A prefab is a template for an entity, like a blueprint.\
----Entities can be created from these using instantiate
----@param t any
----@return any
-function prefab(t)
-    local bits, new = 0, {}
-    for k in next, t do
-        local bit = components[k]
-        if bit then
-            bits |= bit
-        end
-    end
-    if not archetypes[bits] then
-        archetypes[bits], query_cache[bits] = new, new
-    end
-    t.components, t.archetype = bits, archetypes[bits]
-    return t
-end
-
----Instantiates a new entity from a prefab created by `prefab`.\
----Note: this does not recycle entities.
----@param prefab Prefab
----@return Entity instance
-function instantiate(prefab)
-    local e = {}
-    -- Copy the prefab's components into the entity instance
-    for k, v in next, prefab do
-        e[k] = v
-    end
-
-    add(e.archetype, e).row = #e.archetype
-    return setmetatable(e, pint_mt)
 end
 
 ---Runs all systems that are part of `phase`

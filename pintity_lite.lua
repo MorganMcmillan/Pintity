@@ -3,7 +3,7 @@
 
 -- This version removes a lot of features and safety checks that the full version has.
 
--- 300 tokens compressed
+-- 278 tokens compressed
 
 --- Type definitions:
 --- @alias Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
@@ -12,7 +12,6 @@
 --- @alias System fun(entities: Entity[], ...: any[]) -> skip?: boolean
 --- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
 --- @alias Archetype Entity[]
---- @alias Prefab { [string]: any }
 
 --- @type Archetype
 --- The archetype containing no components. Used for recycling.
@@ -146,18 +145,6 @@ end
 local function system(phase, terms, callback)
     add(systems, callback)
     return add(queries, query(terms, callback))
-end
-
----Instantiates a new entity from a simple table containing key-value pairs.
----@param prefab Prefab
----@return Entity instance
-function instantiate(prefab)
-    local e = entity()
-    -- Copy the prefab's components into the entity instance
-    for k, v in next, prefab do
-        e[k] = v
-    end
-    return e
 end
 
 ---Runs all systems
