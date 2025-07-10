@@ -1,38 +1,14 @@
-#include pintity.lua
-
-local function eq(a, b)
-    assert(a == b, tostr(a).." does not equal "..tostr(b))
-end
-
-local function assert_has(e, c)
-    local bits = components[c]
-    assert(e.components & bits == bits, "entity missing component "..c)
-end
+#include test.lua
+#include ../pintity.lua
 
 -- Resets the state of the ECS
 function reset_fn()
     arch0 = {}
     archetypes, query_cache = {[0] = arch0}, {}
+    cached_queries = {}
     component_bit = 1 >> 16
     components = {}
     phases = {}
-end
-
-function write(text)
-    print(text)
-    printh(text)
-end
-
-local function test(name, fn, ...)
-    reset_fn()
-    name..=": "
-    local okay, message = coresume(cocreate(fn), ...)
-    if not okay then
-        write(name.."[failed]: ")
-        write(message)
-    else
-        write(name.."[passed]")
-    end
 end
 
 test("has components", function ()
