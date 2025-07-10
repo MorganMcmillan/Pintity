@@ -28,3 +28,19 @@ function delete_queried(query)
         query[i] = {}
     end
 end
+
+---Creates a new entity.
+---@param t { [string]: any } A table of component-value pairs
+---@return Entity
+function entity(t)
+    local entity, bits = t or {}, 0
+    for k in next, t do
+        bits |= components[k] or 0
+    end
+    t = archetypes[bits]
+    entity.archetype, entity.components, entity.row = t, bits, #t + 1
+    return setmetatable(
+        add(t, entity),
+        pint_mt
+    )
+end
