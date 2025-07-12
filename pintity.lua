@@ -56,7 +56,7 @@ function pint_mt:__call(name)
         rawset(self, name, nil)
     else
         -- Remove self from archetype
-        swap_remove_entity(self.archetype, self.row)
+        swap_remove_entity(self._archetype, self._row)
     end
 end
 
@@ -64,7 +64,7 @@ end
 ---@return Entity
 function entity()
     return setmetatable(
-        add(arch0, { archetype = arch0, row = #arch0 + 1 }),
+        add(arch0, { _archetype = arch0, _row = #arch0 + 1 }),
         pint_mt
     )
 end
@@ -72,7 +72,7 @@ end
 -- Removes the entity at row swaps it with the last entity
 function swap_remove_entity(archetype, row)
     archetype[row] = archetype[#archetype]
-    archetype[row].row = row
+    archetype[row]._row = row
     deli(archetype)
 end
 
@@ -114,11 +114,11 @@ end
 ---@param with? string The name of the component to add
 ---@param without? string The name of the component to remove
 function update_archetype(entity, with, without)
-    local old = entity.archetype
+    local old = entity._archetype
     local new = with and old._with[with] or without and old[without] or exact_match_archetype(old, with, without)
 
     -- Invariant if the last entity is this one
-    swap_remove_entity(old, entity.row)
+    swap_remove_entity(old, entity._row)
     if new then
         -- Move entity from old archetype to new
         add(new, entity)
@@ -130,8 +130,8 @@ function update_archetype(entity, with, without)
 
         add(archetypes, add(query_cache, new))
     end
-    entity.archetype = new
-    entity.row = #new
+    entity._archetype = new
+    entity._row = #new
 end
 
 ---Registers a new component name(s).

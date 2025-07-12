@@ -42,7 +42,7 @@ pint_mt = {}
 function pint_mt:__newindex(name, value)
     local bit = components[name]
     if bit then
-        self.components |= bit
+        self._components |= bit
         update_archetype(self)
     end
     rawset(self, name, value)
@@ -54,11 +54,11 @@ function pint_mt:__call(name)
     -- Note: component data is not actually removed, but it should never be accessed.
     if name then
         -- Remove just one component
-        self.components ^^= components[name]
+        self._components ^^= components[name]
         update_archetype(self)
     else
         -- Remove self from archetype
-        swap_remove_entity(self.archetype, self.row)
+        swap_remove_entity(self._archetype, self._row)
     end
 end
 
@@ -66,7 +66,7 @@ end
 ---@return Entity
 function entity()
     return setmetatable(
-        add(arch0, { archetype = arch0, components = 0, row = #arch0 + 1 }),
+        add(arch0, { _archetype = arch0, _components = 0, _row = #arch0 + 1 }),
         pint_mt
     )
 end
@@ -74,17 +74,17 @@ end
 -- Removes the entity at row swaps it with the last entity
 function swap_remove_entity(archetype, row)
     archetype[row] = archetype[#archetype]
-    archetype[row].row = row
+    archetype[row]._row = row
     deli(archetype)
 end
 
 ---Changes the archetype of an entity.
 function update_archetype(entity)
-    local components = entity.components
+    local components = entity._components
     local new = archetypes[components]
 
     -- Invariant if the last entity is this one
-    swap_remove_entity(entity.archetype, entity.row)
+    swap_remove_entity(entity._archetype, entity._row)
     if new then
         -- Move entity from old archetype to new
         add(new, entity)
@@ -94,8 +94,8 @@ function update_archetype(entity)
 
         archetypes[components], query_cache[components] = new, new
     end
-    entity.archetype = new
-    entity.row = #new
+    entity._archetype = new
+    entity._row = #new
 end
 
 ---Creates a new component identifier.\
