@@ -128,7 +128,7 @@ end
 ---@param tables Archetype[]
 function update_query(query, tables)
     for bits, archetype in next, tables or query_cache do
-        if bits & query.bits == query.bits then
+        if bits & query.terms == query.terms then
             add(query, archetype)
         end
     end

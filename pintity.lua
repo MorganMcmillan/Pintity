@@ -102,21 +102,12 @@ function update_archetype(entity)
     entity.row = #new
 end
 
----Creates a new component identifier.\
----Note: Pintity can only handle creating up to 32 components.
----@param name string the name of the component
-local function component(name)
-    assert(component_bit ~= 0, "Error: component limit reached. Applications can only have up to 32 components.")
-    components[name] = component_bit
-    component_bit <<= 1
-end
-
-function or_terms(terms)
-    local bits = 0
-    if terms then
-        for term in all(split(terms)) do bits |= components[term] end
+---Registers a new component name(s).
+---@param name string A comma separated string of component names
+local function component(names)
+    for name in all(split(names)) do
+        components[name] = {} -- Table of all archetypes containing this component
     end
-    return bits
 end
 
 ---Queries match entities with specific components.
@@ -124,7 +115,7 @@ end
 ---@param exclude? string A comma separated string of component names to exclude
 ---@return Archetype[] query Every archetype matched with the query
 local function query(terms, exclude)
-    return update_query({ bits = or_terms(terms), exclude = or_terms(exclude) }, archetypes)
+    return update_query({ terms = split(terms), exclude = split(exclude) }, archetypes)
 end
 
 ---Cached queries are queries that are updated at the start of every call to _update with `
@@ -140,11 +131,16 @@ end
 ---@param query Query
 ---@param tables Archetype[]
 function update_query(query, tables)
-    for bits, archetype in next, tables or query_cache do
-        if bits & query.bits == query.bits
-        and bits & query.exclude == 0 then
-            add(query, archetype)
+    local terms = query.terms
+    for archetype in all(tables or query_cache) do
+        for term in all(query.terms) do
+            if not archetype[term] then goto ecs_match_failed end
         end
+        for exclude_term in all(query.exclude) do
+            if archetype[exclude_term] then goto ecs_match_failed end
+        end
+        add(query, archetype)
+        ::ecs_match_failed::
     end
     return query
 end
