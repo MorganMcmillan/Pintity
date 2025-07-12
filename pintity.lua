@@ -39,14 +39,23 @@ components = {}
 --- @type Phase[]
 phases = {}
 
+--- @type Entity[]
+deferred_moves = {}
+
 pint_mt = {}
+
+-- Defers an entity for an archetype move.
+-- Used to prevent systems from matching the same entity twice.
+function defer(entity)
+    if entity.unenqueued then add(deferred_moves, entity).unenqueued = false end
+end
 
 -- Used to add a new component
 function pint_mt:__newindex(name, value)
     local bit = components[name]
     if bit then
         self.components |= bit
-        update_archetype(self)
+        defer(self)
     end
     rawset(self, name, value)
 end
@@ -57,7 +66,7 @@ function pint_mt:__call(name)
     if name then
         -- Remove just one component
         self.components ^^= components[name]
-        update_archetype(self)
+        defer(self)
         -- Used to prevent tags from being re-added
         rawset(self, name, nil)
     else
@@ -70,7 +79,7 @@ end
 ---@return Entity
 function entity()
     return setmetatable(
-        add(arch0, { archetype = arch0, components = 0, row = #arch0 + 1 }),
+        add(arch0, { archetype = arch0, components = 0, row = #arch0 + 1, unenqueued = true }),
         pint_mt
     )
 end
@@ -80,26 +89,6 @@ function swap_remove_entity(archetype, row)
     archetype[row] = archetype[#archetype]
     archetype[row].row = row
     deli(archetype)
-end
-
----Changes the archetype of an entity.
-function update_archetype(entity)
-    local components = entity.components
-    local new = archetypes[components]
-
-    -- Invariant if the last entity is this one
-    swap_remove_entity(entity.archetype, entity.row)
-    if new then
-        -- Move entity from old archetype to new
-        add(new, entity)
-    else
-        -- Create new archetype from old's entity and add it
-        new = {entity}
-
-        archetypes[components], query_cache[components] = new, new
-    end
-    entity.archetype = new
-    entity.row = #new
 end
 
 ---Creates a new component identifier.\
@@ -183,6 +172,29 @@ end
 ---Runs all systems that are part of `phase`
 ---@param phase Phase the current phase to run.
 function progress(phase)
+    -- Sync entity archetypes
+    for entity in all(deferred_moves) do
+        local components = entity.components
+        local new = archetypes[components]
+
+        -- Invariant if the last entity is this one
+        swap_remove_entity(entity.archetype, entity.row)
+        if new then
+            -- Move entity from old archetype to new
+            add(new, entity)
+        else
+            -- Create new archetype from old's entity and add it
+            new = {entity}
+
+            archetypes[components], query_cache[components] = new, new
+        end
+        entity.archetype = new
+        entity.row = #new
+        entity.unenqueued = true
+    end
+    deferred_moves = {}
+
+    -- Run systems for entities
     for i, query in inext, phase do
         local system = phase.systems[i]
         for arch in all(query) do
