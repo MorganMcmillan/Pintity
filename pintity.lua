@@ -79,13 +79,50 @@ function swap_remove_entity(archetype, row)
     deli(archetype)
 end
 
+function next_arch_len(arch, with)
+    return arch._len + with and 1 or -1
+end
+
+function add_graph_edges(lesser_arch, greater_arch, with, without)
+        if with then
+            greater_arch[with] = lesser_arch
+            lesser_arch._with[with] = greater_arch
+        else
+            lesser_arch[without] = greater_arch
+            greater_arch._with[without] = lesser_arch
+        end
+end
+
+---@param arch Archetype The archetype to compare with
+---@param with? string The name of the component to add
+---@param without? string The name of the component to remove
+function exact_match_archetype(arch, with, without)
+    local len = next_arch_len(arch, with)
+    for other in all(archetypes) do
+        if other._len == len then
+            local component_start = #other
+            if component_start == 0 then component_start = nil end
+            -- Check that the other archetype has all the components of this archetype
+            for component in next, other, component_start do
+                if not (other[component] or component == without) then
+                    goto ecs_exact_match_failed
+                end
+            end
+            -- Fix up graph edges
+            add_graph_edges(arch, other, with, without)
+            return other
+        end
+        ::ecs_exact_match_failed::
+    end
+end
+
 ---Changes the archetype of an entity.
 ---@param entity Entity The entity to move
 ---@param with? string The name of the component to add
 ---@param without? string The name of the component to remove
 function update_archetype(entity, with, without)
     local old = entity.archetype
-    local new = exact_match_archetype(old, with, without)
+    local new = (with and old._with[with] or old[without]) or exact_match_archetype(old, with, without)
 
     -- Invariant if the last entity is this one
     swap_remove_entity(old, entity.row)
@@ -94,17 +131,9 @@ function update_archetype(entity, with, without)
         add(new, entity)
     else
         -- Create new archetype from old's entity and add it
-        new = {entity, _with = {}}
-        -- Add graph edges
-        if with then
-            new[with] = old
-            old._with[with] = new
-            new._len = old._len + 1
-        elseif without then
-            old[without] = new
-            new._with[without] = old
-            new._len = old._len - 1
-        end
+        new = {entity, _with = {}, _len = next_arch_len(old, with)}
+        -- Manage graph
+        add_graph_edges(old, new, with, without)
 
         add(archetypes, add(query_cache, new))
     end
@@ -143,15 +172,15 @@ end
 ---@return Query query
 function update_query(query, tables)
     for archetype in all(tables or query_cache) do
-        if archetype._len < #query.terms then goto ecs_match_failed end
+        if archetype._len < #query.terms then goto ecs_query_match_failed end
         for term in all(query.terms) do
-            if not archetype[term] then goto ecs_match_failed end
+            if not archetype[term] then goto ecs_query_match_failed end
         end
         for exclude_term in all(query.exclude) do
-            if archetype[exclude_term] then goto ecs_match_failed end
+            if archetype[exclude_term] then goto ecs_query_match_failed end
         end
         add(query, archetype)
-        ::ecs_match_failed::
+        ::ecs_query_match_failed::
     end
     return query
 end
