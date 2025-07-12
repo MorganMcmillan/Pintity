@@ -118,7 +118,7 @@ end
 ---@param without? string The name of the component to remove
 function update_archetype(entity, with, without)
     local old = entity.archetype
-    local new = (with and old._with[with] or old[without]) or exact_match_archetype(old, with, without)
+    local new = with and old._with[with] or without and old[without] or exact_match_archetype(old, with, without)
 
     -- Invariant if the last entity is this one
     swap_remove_entity(old, entity.row)
@@ -138,7 +138,7 @@ function update_archetype(entity, with, without)
 end
 
 ---Registers a new component name(s).
----@param name string A comma separated string of component names
+---@param names string A comma separated string of component names
 local function component(names)
     for name in all(split(names)) do
         components[name] = true
