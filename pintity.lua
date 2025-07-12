@@ -98,10 +98,8 @@ function exact_match_archetype(arch, with, without)
     local len = next_arch_len(arch, with)
     for other in all(archetypes) do
         if other._len == len then
-            local component_start = #other
-            if component_start == 0 then component_start = nil end
             -- Check that the other archetype has all the components of this archetype
-            for component in next, other, component_start do
+            for component in next, other, #other > 0 and #other or nil do
                 if not (other[component] or component == without) then
                     goto ecs_exact_match_failed
                 end
