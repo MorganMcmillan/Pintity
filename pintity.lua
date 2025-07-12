@@ -6,24 +6,23 @@
 
 --- Type definitions:
 --- @alias Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
---- @alias Component integer a singular bit identifying a component
---- @alias ComponentSet integer bitset of components
+--- @alias Component string The name of a component
 --- @alias System fun(entities: Entity[]) -> skip?: boolean
 --- @alias Phase { [integer]: Query, systems: System[] }
 --- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
---- @alias Archetype Entity[]
+--- @alias Archetype { [integer]: Entity, [Component]: Archetype, _with: { [Component]: Archetype }, _len: integer }
 
 --- @type Archetype
 --- The archetype containing no components. Used for recycling.
-arch0 = {}
+arch0 = {_with = {}, _len = 0}
 
---- @type { ComponentSet: Archetype }
-archetypes = {[0] = arch0}
+--- @type Archetype[]
+archetypes = {arch0}
 
 --- @type Query[]
 cached_queries = {}
 
---- @type { ComponentSet: Archetype }
+--- @type Archetype[]
 --- New archetypes created this frame to update queries by.\
 --- Prevents system queries from adding archetypes twice.
 query_cache = {}
@@ -33,7 +32,7 @@ query_cache = {}
 --- Pico-8 uses 32-bit fixed point numbers, so `1` is actually bit 16
 component_bit = 1 >> 16
 
---- @type { string: Component }
+--- @type { Component: true }
 components = {}
 
 --- @type Phase[]
@@ -45,8 +44,7 @@ pint_mt = {}
 function pint_mt:__newindex(name, value)
     local bit = components[name]
     if bit then
-        self.components |= bit
-        update_archetype(self)
+        update_archetype(self, name)
     end
     rawset(self, name, value)
 end
@@ -56,8 +54,7 @@ end
 function pint_mt:__call(name)
     if name then
         -- Remove just one component
-        self.components ^^= components[name]
-        update_archetype(self)
+        update_archetype(self, nil, name)
         -- Used to prevent tags from being re-added
         rawset(self, name, nil)
     else
@@ -70,7 +67,7 @@ end
 ---@return Entity
 function entity()
     return setmetatable(
-        add(arch0, { archetype = arch0, components = 0, row = #arch0 + 1 }),
+        add(arch0, { archetype = arch0, row = #arch0 + 1 }),
         pint_mt
     )
 end
@@ -83,20 +80,33 @@ function swap_remove_entity(archetype, row)
 end
 
 ---Changes the archetype of an entity.
-function update_archetype(entity)
-    local components = entity.components
-    local new = archetypes[components]
+---@param entity Entity The entity to move
+---@param with? string The name of the component to add
+---@param without? string The name of the component to remove
+function update_archetype(entity, with, without)
+    local old = entity.archetype
+    local new = exact_match_archetype(old, with, without)
 
     -- Invariant if the last entity is this one
-    swap_remove_entity(entity.archetype, entity.row)
+    swap_remove_entity(old, entity.row)
     if new then
         -- Move entity from old archetype to new
         add(new, entity)
     else
         -- Create new archetype from old's entity and add it
-        new = {entity}
+        new = {entity, _with = {}}
+        -- Add graph edges
+        if with then
+            new[with] = old
+            old._with[with] = new
+            new._len = old._len + 1
+        elseif without then
+            old[without] = new
+            new._with[without] = old
+            new._len = old._len - 1
+        end
 
-        archetypes[components], query_cache[components] = new, new
+        add(archetypes, add(query_cache, new))
     end
     entity.archetype = new
     entity.row = #new
@@ -106,7 +116,7 @@ end
 ---@param name string A comma separated string of component names
 local function component(names)
     for name in all(split(names)) do
-        components[name] = {} -- Table of all archetypes containing this component
+        components[name] = true
     end
 end
 
@@ -130,9 +140,10 @@ end
 --- Adds new archetypes after they are created
 ---@param query Query
 ---@param tables Archetype[]
+---@return Query query
 function update_query(query, tables)
-    local terms = query.terms
     for archetype in all(tables or query_cache) do
+        if archetype._len < #query.terms then goto ecs_match_failed end
         for term in all(query.terms) do
             if not archetype[term] then goto ecs_match_failed end
         end
@@ -156,7 +167,7 @@ end
 
 --- Automatically updates all phases. Must be called in `_update` before any `progress` is called.
 function update_phases()
-    if next(query_cache) then
+    if #query_cache > 0 then
         foreach(cached_queries, update_query)
         query_cache = {}
     end
