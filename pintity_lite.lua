@@ -1,9 +1,6 @@
 -- Pintity_lite: an even simpler ECS for Pico-8
--- By Morgan.
-
 -- This version removes a lot of features and safety checks that the full version has.
-
--- 278 tokens compressed
+-- By Morgan.
 
 --- Type definitions:
 --- @alias Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
