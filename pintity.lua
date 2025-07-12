@@ -84,13 +84,11 @@ function next_arch_len(arch, with)
 end
 
 function add_graph_edges(lesser_arch, greater_arch, with, without)
-        if with then
-            greater_arch[with] = lesser_arch
-            lesser_arch._with[with] = greater_arch
-        else
-            lesser_arch[without] = greater_arch
-            greater_arch._with[without] = lesser_arch
-        end
+    if with then
+        lesser_arch, greater_arch, with = greater_arch, lesser_arch, without
+    end
+    greater_arch[with] = lesser_arch
+    lesser_arch._with[with] = greater_arch
 end
 
 ---@param arch Archetype The archetype to compare with
