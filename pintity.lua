@@ -2,7 +2,7 @@
 -- By Morgan.
 
 --- Type definitions:
---- @alias Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
+--- @alias Entity { _archetype: Archetype, _row: integer } An object containing arbitrary data
 --- @alias Component string The name of a component
 --- @alias System fun(entities: Entity[]) -> skip?: boolean
 --- @alias Phase { [integer]: Query, systems: System[] }
@@ -39,8 +39,7 @@ pint_mt = {}
 
 -- Used to add a new component
 function pint_mt:__newindex(name, value)
-    local bit = components[name]
-    if bit then
+    if components[name] then
         update_archetype(self, name)
     end
     rawset(self, name, value)
@@ -77,11 +76,11 @@ function swap_remove_entity(archetype, row)
 end
 
 function next_arch_len(arch, with)
-    return arch._len + with and 1 or -1
+    return arch._len + (with and 1 or -1)
 end
 
 function add_graph_edges(lesser_arch, greater_arch, with, without)
-    if with then
+    if without then
         lesser_arch, greater_arch, with = greater_arch, lesser_arch, without
     end
     greater_arch[with] = lesser_arch
@@ -94,10 +93,10 @@ end
 function exact_match_archetype(arch, with, without)
     local len = next_arch_len(arch, with)
     for other in all(archetypes) do
-        if other._len == len then
+        if other._len == len and arch ~= other then
             -- Check that the other archetype has all the components of this archetype
             for component in next, other, #other > 0 and #other or nil do
-                if not (other[component] or component == without) then
+                if not (arch[component] or component == with) then
                     goto ecs_exact_match_failed
                 end
             end
@@ -109,13 +108,19 @@ function exact_match_archetype(arch, with, without)
     end
 end
 
+-- Gets the component edge of an archetype and ensures that it is a real edge.
+function get_edge(arch, with)
+    local edge = with and arch[with]
+    if edge ~= true then return edge end
+end
+
 ---Changes the archetype of an entity.
 ---@param entity Entity The entity to move
 ---@param with? string The name of the component to add
 ---@param without? string The name of the component to remove
 function update_archetype(entity, with, without)
     local old = entity._archetype
-    local new = with and old._with[with] or without and old[without] or exact_match_archetype(old, with, without)
+    local new = get_edge(old._with, with) or get_edge(old, without) or exact_match_archetype(old, with, without)
 
     -- Invariant if the last entity is this one
     swap_remove_entity(old, entity._row)
@@ -125,6 +130,13 @@ function update_archetype(entity, with, without)
     else
         -- Create new archetype from old's entity and add it
         new = {entity, _with = {}, _len = next_arch_len(old, with)}
+        -- Ensure that new has all of old's components (except for without)
+        for component_name in next, old, #old > 0 and #old or nil do
+            if components[component_name] then
+                new[component_name] = true
+            end
+        end
+        if without then new[without] = nil end
         -- Manage graph
         add_graph_edges(old, new, with, without)
 
