@@ -87,6 +87,7 @@ function add_graph_edges(lesser_arch, greater_arch, with, without)
     lesser_arch._with[with] = greater_arch
 end
 
+--- Returns the exact match of an archetype with or without the specified component
 ---@param arch Archetype The archetype to compare with
 ---@param with? string The name of the component to add
 ---@param without? string The name of the component to remove

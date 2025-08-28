@@ -1,14 +1,13 @@
 # Pintity: Minimalist ECS For Pico-8
 
-Pintity is a bitset-archetype ECS for Pico-8, meaning that components are represented by bits and entities are stored into tables. That also means it's efficient for querying lots of entities.
+Pintity is an archetype ECS for Pico-8, meaning that components are stored in tables representing the set of components they have.
 
 # Features
 
 - Fast and easy to use API
 - Simplistic AOS storage that feels just like OOP
-- Extremely fast queries that can be updated automatically
+- Fast queries that can be updated automatically
 - Automatic systems that iterate multiple entities at once
-- Prefabs for quick spawning of entities
 - Phases to separate update logic from drawing code
 
 # Usage
@@ -21,7 +20,7 @@ Entities are objects with any number of components.
 local player = entity()
 ```
 
-Components describe data and are added to entities. Components without data are called tags.
+Components describe data and are added to entities. A component is added by simply assigning its value in the entity like a regular table. Components without data are called tags.
 
 ```lua
 -- A component is a name that matches to an entity's attribute.
