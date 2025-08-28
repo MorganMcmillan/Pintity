@@ -9,7 +9,7 @@ pint_mt.__index = events
 ---@param entity Entity The entity to match all handlers on
 ---@param ... any Extra arguments to event handlers
 function event_mt:__call(entity, ...)
-    local components = entity.components
+    local archetype = entity._archetype
     -- Get cached handlers
     local handlers = self[components]
     if not handlers then
@@ -17,13 +17,17 @@ function event_mt:__call(entity, ...)
         -- Manually match event handlers
         local callbacks, exclusions = self.callbacks, self.exclusions
         for i, terms in inext, self.terms do
-            if components & terms == terms
-            and components & exclusions[i] == 0 then
-                add(handlers, callbacks[i])
+            for term in all(terms) do
+                if not archetype[term] then goto event_query_match_failed end
             end
+            for exclude_term in all(exclusions) do
+                if archetype[exclude_term] then goto event_query_match_failed end
+            end
+            add(handlers, callbacks[i])
+            ::event_query_match_failed::
         end
         -- Cache event handlers
-        self[components] = handlers
+        self[archetype] = handlers
     end
     for i = 1, #handlers do
         handlers[i](entity, ...)
@@ -49,7 +53,7 @@ end
 ---@param callback any
 local function on(event, terms, exclude, callback)
     event = events[event]
-    add(event.terms, or_terms(terms))
-    add(event.exclusions, or_terms(callback and exclude))
+    add(event.terms, terms)
+    add(event.exclusions, callback and exclude)
     add(event.callbacks, callback or exclude)
 end
