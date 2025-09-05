@@ -2,7 +2,7 @@
 -- By Morgan.
 
 --- Type definitions:
---- @alias Entity { _archetype: Archetype, _row: integer } An object containing arbitrary data
+--- @alias Entity { archetype: Archetype, _row: integer } An object containing arbitrary data
 --- @alias Component string The name of a component
 --- @alias System fun(entities: Entity[]) -> skip?: boolean
 --- @alias Phase { [integer]: Query, systems: System[] }
@@ -55,7 +55,7 @@ function pint_mt:__call(name)
         rawset(self, name, nil)
     else
         -- Remove self from archetype
-        swap_remove_entity(self._archetype, self._row)
+        swap_remove_entity(self.archetype, self._row)
     end
 end
 
@@ -63,7 +63,7 @@ end
 ---@return Entity
 function entity()
     return setmetatable(
-        add(arch0, { _archetype = arch0, _row = #arch0 + 1 }),
+        add(arch0, { archetype = arch0, _row = #arch0 + 1 }),
         pint_mt
     )
 end
@@ -120,7 +120,7 @@ end
 ---@param with? string The name of the component to add
 ---@param without? string The name of the component to remove
 function update_archetype(entity, with, without)
-    local old = entity._archetype
+    local old = entity.archetype
     local new = get_edge(old._with, with) or get_edge(old, without) or exact_match_archetype(old, with, without)
 
     -- Invariant if the last entity is this one
@@ -143,7 +143,7 @@ function update_archetype(entity, with, without)
 
         add(archetypes, add(query_cache, new))
     end
-    entity._archetype = new
+    entity.archetype = new
     entity._row = #new
 end
 

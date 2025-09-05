@@ -1,40 +1,72 @@
 -- This is a concept for more complex queries. This likely won't be needed for any Pico-8 game, but can be emulated within systems.
-function orAll(t) local bits = 0 for v in all(t) do bits |= v end return bits end
 
-function complex_query(terms, excludeTerms, optionalTerms, orTerms)
-    local results = {}
-    local termBits = orAll(terms)
-    if orTerms then
-        for orTerm in all(orTerms) do
-            for term in all(orTerm) do
-                termBits |= term
-            end
+local function term_identity(term, archetype)
+    return archetype[term]
+end
+
+local function term_not(term, archetype)
+    return not archetype[term]
+end
+
+--- Somehow I feel that these functions should have more responsibility over how queries are managed.
+local function term_optional()
+    return true
+end
+
+local function term_variable()
+    -- TODO: figure out how queries are going to even manage variables
+    -- I should probably think about how a query even matches with archetypes
+    return true
+end
+
+--- Returns query terms as a parsed list of expressions
+local function parse_terms(terms)
+    local query = {}
+    for i, term in inext, split(terms) do
+        local operator, rest = term[1], split(sub(term, 2), '|')
+        if operator == '!' then
+            query[i] = { operator = term_not, term = rest}
+        elseif operator == '?' then
+            query[i] = { operator = term_optional, term = rest }
+        elseif operator == '@' then
+            query = { operator = term_variable, term = {sub(term, 2)} }
+        else
+            query[i] = { operator = term_identity, term = split(term, '|') }
         end
     end
+end
 
-    excludeTerms = orAll(excludeTerms)
-    for bitset, archetype in next, archetypes do
-        if bitset & termBits ~= 0 and bitset & excludeTerms == 0 then
-            local fields = {}
-            for term in all(terms) do
-                add(fields, archetype[term])
-            end
-            if optionalTerms then
-                for term in all(optionalTerms) do
-                    add(fields, archetype[term] or false) 
-                end
-            end
-            if orTerms then
-                for orTerm in all(orTerms) do
-                    for term in all(orTerm) do
-                        col = archetype[term]
-                        if col then add(fields, col) end
-                        break 
-                    end
-                end
-            end
-            add(results, fields)
+--- Like the old query function, except this version uses a proper syntax:
+--- Normal term: "name" a plain component name
+--- Exlcuded term: "!name"
+--- Optional term: "?name" normally would be a no-op, but I'm thinking of adding query information to systems
+--- Or terms: "foo|bar|baz" these form a group of components that can either match. Technically every term is an or term with just one component in the group
+--- Pair term: "(likes:apples)" based on Flecs' relationships. Uses ':' instead of ',' because of `split`
+--- Variable: "@var" creates a new query variable who's value is the component it matches on.
+--- Variables are used to restrict the set of results a wildcard returns, so "(likes:@var),(eats:@var)" returns only the strict subset of things this entity both likes and eats
+--- Equality: "@var==foo|bar|baz"
+--- Negated equality: "@var!=foo|bar|baz"
+local function query(terms)
+    update_query({terms = parse_terms(terms)}, archetypes)
+end
+
+--- Tests whether or not a query matches a specific archetype.
+---@param query Query
+---@param archetype Archetype
+---@return boolean match if the query matches.
+local function query_matches_archetype(query, archetype)
+    for term in all(query.terms) do
+        for or_term in all(term.term) do
+            if not term.operator(or_term) then return false end
         end
     end
-    return results
+    return true
+end
+
+function update_query(query, tables)
+    for archetype in all(tables or query_cache) do
+        if query_matches_archetype(query, archetype) then
+            add(query, archetype)
+        end
+    end
 end
