@@ -1,17 +1,18 @@
 -- Events module for Pintity.
 -- By Morgan.
 
-events, event_mt = {}, {}
-
-pint_mt.__index = events
+event_mt = {}
 
 ---Emits event for a singular entity.
+---Events can be thought of as "dynamic functions" for entities,
+---as their execution is based on what components an entity has.
 ---@param entity Entity The entity to match all handlers on
 ---@param ... any Extra arguments to event handlers
 function event_mt:__call(entity, ...)
-    local archetype = entity._archetype
+    local archetype = entity.archetype
     -- Get cached handlers
-    local handlers = self[components]
+    -- The set of events corresponds to the archetype the entity belongs to
+    local handlers = self[archetype]
     if not handlers then
         handlers = {}
         -- Manually match event handlers
@@ -37,9 +38,12 @@ end
 --- @alias Event { callbacks: fun(entity: Entity, ...: any)[], terms: ComponentSet[], exclusions: ComponentSet[] } A set of functions that are called if an entity matches a query.
 
 ---Creates a new event. An event is just a set of functions that match on certain entities.
+---Events are called just like regular functions. The main difference being that they match an arbitrary amount of functions based on what components the entity has.
+---In a way they can be thought of as systems that only match a single entity.
 ---@param name string The name of the event
+---@return Event event the newly created event
 local function event(name)
-    events[name] = setmetatable({
+    return setmetatable({
         callbacks = {},
         terms = {},
         exclusions = {}
@@ -47,12 +51,11 @@ local function event(name)
 end
 
 ---Attaches a callback to the event, matched by a query
----@param event string The name of the event to execute on
+---@param event Event the event to execute on
 ---@param terms string A comma separated string of component names
 ---@param exclude? string A comma separated string of component names to exclude
 ---@param callback any
 local function on(event, terms, exclude, callback)
-    event = events[event]
     add(event.terms, terms)
     add(event.exclusions, callback and exclude)
     add(event.callbacks, callback or exclude)

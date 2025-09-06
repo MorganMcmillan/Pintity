@@ -4,6 +4,7 @@
 --- Type definitions:
 --- @alias Entity { archetype: Archetype, _row: integer } An object containing arbitrary data
 --- @alias Component string The name of a component
+--- @alias Relationship string The name of a component
 --- @alias System fun(entities: Entity[]) -> skip?: boolean
 --- @alias Phase { [integer]: Query, systems: System[] }
 --- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
@@ -24,22 +25,35 @@ cached_queries = {}
 --- Prevents system queries from adding archetypes twice.
 query_cache = {}
 
---- @type Component
---- The current component ID\
---- Pico-8 uses 32-bit fixed point numbers, so `1` is actually bit 16
-component_bit = 1 >> 16
-
 --- @type { Component: true }
 components = {}
+
+--- @type { Relationship: true }
+relationships = {}
 
 --- @type Phase[]
 phases = {}
 
 pint_mt = {}
 
+relationship_mt = {}
+
 -- Used to add a new component
 function pint_mt:__newindex(name, value)
-    if components[name] then
+    if relationships[name] then
+        value = setmetatable({}, {
+            __newindex = function(relationship, target, value)
+                update_archetype(self, relationship, nil, target)
+                rawset(relationship, target, value)
+            end,
+            -- Used to delete a target from the relationship
+            -- Unlike the entity's `__call` this one requires that a name be passed in
+            __call = function(relationship, target)
+                update_archetype(self, nil, name, target)
+                rawset(relationship, target, nil)
+            end
+        })
+    elseif components[name] then
         update_archetype(self, name)
     end
     rawset(self, name, value)
@@ -75,10 +89,6 @@ function swap_remove_entity(archetype, row)
     deli(archetype)
 end
 
-function next_arch_len(arch, with)
-    return arch._len + (with and 1 or -1)
-end
-
 function add_graph_edges(lesser_arch, greater_arch, with, without)
     if without then
         lesser_arch, greater_arch, with = greater_arch, lesser_arch, without
@@ -87,31 +97,64 @@ function add_graph_edges(lesser_arch, greater_arch, with, without)
     lesser_arch._with[with] = greater_arch
 end
 
---- Returns the exact match of an archetype with or without the specified component
----@param arch Archetype The archetype to compare with
----@param with? string The name of the component to add
----@param without? string The name of the component to remove
-function exact_match_archetype(arch, with, without)
-    local len = next_arch_len(arch, with)
-    for other in all(archetypes) do
-        if other._len == len and arch ~= other then
-            -- Check that the other archetype has all the components of this archetype
-            for component in next, other, #other > 0 and #other or nil do
-                if not (arch[component] or component == with) then
-                    goto ecs_exact_match_failed
+local function kpairs(table)
+    return next, table, #table > 0 and #table or nil
+end
+
+function arch_eq(arch1, arch2, with, without, is_target)
+    local key_set = {}
+    for component, relationship in kpairs(arch1) do
+        if not (arch2[component] or component == without) then
+            return false
+        end
+        if relationships[component] then
+            local relationship_key_set = {}
+            for target in next, relationship do
+                if not arch2[component][target] then
+                    return false
+                end
+
+            end
+            key_set[component] = relationship_key_set
+        else
+            key_set[component] = true
+        end
+    end
+    -- Evaluate key set
+    for component, relationship in kpairs(arch2) do
+        local entry = key_set[component]
+        if not (entry or component == with) then
+            return false
+        end
+        if relationships[component] then
+            for target in next, relationship do
+                if not entry[target] then
+                    return false
                 end
             end
-            -- Fix up graph edges
-            add_graph_edges(arch, other, with, without)
+        end
+    end
+    return true
+end
+
+--- Returns the exact match of an archetype with or without the specified component
+---@param arch Archetype The archetype to compare with
+---@param ...? string Both `with` and `without`. Replaced with `...` to save tokens.
+-- Maybe put arch in it as well. Will need to change each function that receives it.
+function exact_match_archetype(arch, ...)
+    for other in all(archetypes) do
+        -- Check that the other archetype has all the components of this archetype
+        if arch_eq(arch, other, ...) then
+            add_graph_edges(arch, other, ...)
             return other
         end
-        ::ecs_exact_match_failed::
     end
 end
 
--- Gets the component edge of an archetype and ensures that it is a real edge.
-function get_edge(arch, with)
+-- Gets the component or relationship edge of an archetype and ensures that it is a real edge.
+function get_edge(arch, with, target)
     local edge = with and arch[with]
+    if target and edge then edge = edge[target] end
     if edge ~= true then return edge end
 end
 
@@ -119,9 +162,12 @@ end
 ---@param entity Entity The entity to move
 ---@param with? string The name of the component to add
 ---@param without? string The name of the component to remove
-function update_archetype(entity, with, without)
+---@param target? any The target if with|without is a relationship
+function update_archetype(entity, with, without, target)
+    -- TODO: figure out what to do when a new relationship is added
+    -- That will probably just be handled within entity's __newindex
     local old = entity.archetype
-    local new = get_edge(old._with, with) or get_edge(old, without) or exact_match_archetype(old, with, without)
+    local new = get_edge(old._with, with, target) or get_edge(old, without, target) or exact_match_archetype(old, with, without, target)
 
     -- Invariant if the last entity is this one
     swap_remove_entity(old, entity._row)
@@ -130,14 +176,22 @@ function update_archetype(entity, with, without)
         add(new, entity)
     else
         -- Create new archetype from old's entity and add it
-        new = {entity, _with = {}, _len = next_arch_len(old, with)}
+        new = {entity, _with = {}}
         -- Ensure that new has all of old's components (except for without)
-        for component_name in next, old, #old > 0 and #old or nil do
-            if components[component_name] then
+        for component_name, targets in next, old, #old > 0 and #old or nil do
+            if relationships[component_name] then
+                for target in all(targets) do
+                    new[component_name][target] = true
+                end
+            elseif components[component_name] then
                 new[component_name] = true
             end
         end
-        if without then new[without] = nil end
+        if without then
+            -- TODO: figure out what to do when a relationship is both present and no longer has any targets
+            -- It should definitely be removed from the table entirely
+            new[without] = nil
+            end
         -- Manage graph
         add_graph_edges(old, new, with, without)
 
