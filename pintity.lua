@@ -8,11 +8,11 @@
 --- @alias System fun(entities: Entity[]) -> skip?: boolean
 --- @alias Phase { [integer]: Query, systems: System[] }
 --- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
---- @alias Archetype { [integer]: Entity, [Component]: Archetype, _with: { [Component]: Archetype }, _len: integer }
+--- @alias Archetype { [integer]: Entity, [Component]: Archetype, _with: { [Component]: Archetype } }
 
 --- @type Archetype
 --- The archetype containing no components. Used for recycling.
-arch0 = {_with = {}, _len = 0}
+arch0 = {_with = {}}
 
 --- @type Archetype[]
 archetypes = {arch0}
@@ -232,7 +232,6 @@ end
 ---@return Query query
 function update_query(query, tables)
     for archetype in all(tables or query_cache) do
-        if archetype._len < #query.terms then goto ecs_query_match_failed end
         for term in all(query.terms) do
             if not archetype[term] then goto ecs_query_match_failed end
         end
