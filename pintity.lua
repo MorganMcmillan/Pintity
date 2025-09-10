@@ -94,8 +94,10 @@ function add_graph_edges(lesser_arch, greater_arch, with, without, target)
         lesser_arch, greater_arch, with = greater_arch, lesser_arch, without
     end
     if target then
-        greater_arch[with][target] = lesser_arch
+        local relationship = greater_arch[with]
+        if relationship then relationship[target] = lesser_arch else greater_arch[with] = {[target] = lesser_arch} end
         lesser_arch._with[with][target] = greater_arch
+        if relationship then relationship[target] = greater_arch else lesser_arch[with] = {[target] = greater_arch} end
     else
         greater_arch[with] = lesser_arch
         lesser_arch._with[with] = greater_arch
@@ -194,12 +196,14 @@ function update_archetype(entity, with, without, target)
         -- Create new archetype from old's entity and add it
         new = { entity, _with = {} }
         -- Ensure that new has all of old's components (except for without)
-        for component_name, targets in next, old, #old > 0 and #old or nil do
+        for component_name, targets in kpairs(old) do
             -- Ensure that when old's component is a relationship that its targets are also added to new
             if relationships[component_name] then
-                for target in all(targets) do
-                    new[component_name][target] = true
+                local relationship = {}
+                for target in all(relationship) do
+                    relationship[target] = true
                 end
+                new[component_name] = relationship
             else
                 new[component_name] = true
             end
@@ -214,7 +218,7 @@ function update_archetype(entity, with, without, target)
                 new[without] = nil
             end
         end
-        -- Manage graph
+        -- Manage graph. This will also add `with` to the new archetype
         add_graph_edges(old, new, with, without, target)
 
         add(archetypes, add(query_cache, new))
