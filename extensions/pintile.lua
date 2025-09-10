@@ -2,8 +2,8 @@
 
 ---Spawns a new entity for each tile that is matched by `entities`.
 ---When an entity is spawned, it will attempt to have its "position", "sprite", and "tile" components set if they were already set to true.
----@param entities {}[] tile sprite mapping to tables with component-value pairs
----@param replacements {}[] tile sprite mapping to the sprite to replace this tile with
+---@param entities { [integer]: { [string]: any} } tile sprite mapping to tables with component-value pairs
+---@param replacements { [integer]: integer } tile sprite mapping to the sprite to replace this tile with
 ---@param x? integer the x starting coordinate of the tilemap
 ---@param y? integer the y starting coordinate of the tilemap
 ---@param width? integer the width of the tilemap area to spawn from

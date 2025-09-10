@@ -7,15 +7,15 @@
 --- @alias Relationship string The name of a component
 --- @alias System fun(entities: Entity[]) -> skip?: boolean
 --- @alias Phase { [integer]: Query, systems: System[] }
---- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
+--- @alias Query { terms: Component[], exclude: Component[], [integer]: Archetype }
 --- @alias Archetype { [integer]: Entity, [Component]: Archetype, _with: { [Component]: Archetype } }
 
 --- @type Archetype
 --- The archetype containing no components. Used for recycling.
-arch0 = {_with = {}}
+arch0 = { _with = {} }
 
 --- @type Archetype[]
-archetypes = {arch0}
+archetypes = { arch0 }
 
 --- @type Query[]
 cached_queries = {}
@@ -82,55 +82,70 @@ function entity()
     )
 end
 
--- Removes the entity at row swaps it with the last entity
+-- Removes the entity at row and swaps it with the last entity
 function swap_remove_entity(archetype, row)
     archetype[row] = archetype[#archetype]
     archetype[row]._row = row
     deli(archetype)
 end
 
-function add_graph_edges(lesser_arch, greater_arch, with, without)
+function add_graph_edges(lesser_arch, greater_arch, with, without, target)
     if without then
         lesser_arch, greater_arch, with = greater_arch, lesser_arch, without
     end
-    greater_arch[with] = lesser_arch
-    lesser_arch._with[with] = greater_arch
+    if target then
+        greater_arch[with][target] = lesser_arch
+        lesser_arch._with[with][target] = greater_arch
+    else
+        greater_arch[with] = lesser_arch
+        lesser_arch._with[with] = greater_arch
+    end
 end
 
 local function kpairs(table)
     return next, table, #table > 0 and #table or nil
 end
 
-function arch_eq(arch1, arch2, with, without, is_target)
-    local key_set = {}
-    for component, relationship in kpairs(arch1) do
-        if not (arch2[component] or component == without) then
-            return false
-        end
+-- Checks that an archetype is equal to another give or take certain components
+function arch_eq(arch, other, with, without, target)
+    local component_set = {}
+    -- Copy component/relationship-target set from archetype
+    for component, relationship in kpairs(arch) do
+        -- Important: we also need to create a copy of the target set so we don't overwrite the actual relationship record
         if relationships[component] then
-            local relationship_key_set = {}
+            local target_set = {}
             for target in next, relationship do
-                if not arch2[component][target] then
-                    return false
-                end
-
+                target_set[target] = true
             end
-            key_set[component] = relationship_key_set
+            component_set[component] = target_set
         else
-            key_set[component] = true
+            component_set[component] = true
         end
     end
-    -- Evaluate key set
-    for component, relationship in kpairs(arch2) do
-        local entry = key_set[component]
-        if not (entry or component == with) then
-            return false
+    -- Modify set to reflect the desired target archetype
+    if target then
+        if with then
+            local relationship = component_set[with]
+            if relationship then relationship[target] = true else component_set[with] = {[target] = true} end
+        else
+            local relationship = component_set[without]
+            relationship[target] = nil
+            if not next(relationship) then component_set[without] = nil end
         end
+    else
+        if with then
+            component_set[with] = true
+        else
+            component_set[without] = nil
+        end
+    end
+    -- Match component set on other archetype
+    for component, relationship in kpairs(other) do
+        local entry = component_set[component]
+        if not entry then return false end
         if relationships[component] then
             for target in next, relationship do
-                if not entry[target] then
-                    return false
-                end
+                if not entry[target] then return false end
             end
         end
     end
@@ -139,7 +154,7 @@ end
 
 --- Returns the exact match of an archetype with or without the specified component
 ---@param arch Archetype The archetype to compare with
----@param ...? string Both `with` and `without`. Replaced with `...` to save tokens.
+---@param ...? string Both `with`, `without`, and `target`. Replaced with `...` to save tokens.
 -- Maybe put arch in it as well. Will need to change each function that receives it.
 function exact_match_archetype(arch, ...)
     for other in all(archetypes) do
@@ -151,7 +166,7 @@ function exact_match_archetype(arch, ...)
     end
 end
 
--- Gets the component or relationship edge of an archetype and ensures that it is a real edge.
+-- Gets the component or relationship edge of an archetype and ensures that it points to another archetype.
 function get_edge(arch, with, target)
     local edge = with and arch[with]
     if target and edge then edge = edge[target] end
@@ -167,7 +182,8 @@ function update_archetype(entity, with, without, target)
     -- TODO: figure out what to do when a new relationship is added
     -- That will probably just be handled within entity's __newindex
     local old = entity.archetype
-    local new = get_edge(old._with, with, target) or get_edge(old, without, target) or exact_match_archetype(old, with, without, target)
+    local new = get_edge(old._with, with, target) or get_edge(old, without, target) or
+    exact_match_archetype(old, with, without, target)
 
     -- Invariant if the last entity is this one
     swap_remove_entity(old, entity._row)
@@ -176,24 +192,30 @@ function update_archetype(entity, with, without, target)
         add(new, entity)
     else
         -- Create new archetype from old's entity and add it
-        new = {entity, _with = {}}
+        new = { entity, _with = {} }
         -- Ensure that new has all of old's components (except for without)
         for component_name, targets in next, old, #old > 0 and #old or nil do
+            -- Ensure that when old's component is a relationship that its targets are also added to new
             if relationships[component_name] then
                 for target in all(targets) do
                     new[component_name][target] = true
                 end
-            elseif components[component_name] then
+            else
                 new[component_name] = true
             end
         end
         if without then
-            -- TODO: figure out what to do when a relationship is both present and no longer has any targets
-            -- It should definitely be removed from the table entirely
-            new[without] = nil
+            if target then
+                new[without][target] = nil
+                if not next(new[without]) then
+                    new[without] = nil
+                end
+            else
+                new[without] = nil
             end
+        end
         -- Manage graph
-        add_graph_edges(old, new, with, without)
+        add_graph_edges(old, new, with, without, target)
 
         add(archetypes, add(query_cache, new))
     end
@@ -206,6 +228,14 @@ end
 local function component(names)
     for name in all(split(names)) do
         components[name] = true
+    end
+end
+
+---Registers a new relationship name(s).
+---@param names string A comma separated string of relationship names
+local function relationship(names)
+    for name in all(split(names)) do
+        relationships[name] = true
     end
 end
 
@@ -272,7 +302,7 @@ end
 ---@return Archetype[] query
 local function system(phase, terms, exclude, callback)
     add(phase.systems, callback or exclude)
-    return add(phase, terms and cached_query(terms, callback and exclude) or {{0}}) -- Empty table to ensure iteration
+    return add(phase, terms and cached_query(terms, callback and exclude) or { { 0 } }) -- Empty table to ensure iteration
 end
 
 ---Runs all systems that are part of `phase`

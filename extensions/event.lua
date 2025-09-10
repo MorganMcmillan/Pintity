@@ -40,11 +40,9 @@ end
 ---Creates a new event. An event is just a set of functions that match on certain entities.
 ---Events are called just like regular functions. The main difference being that they match an arbitrary amount of functions based on what components the entity has.
 ---In a way they can be thought of as systems that only match a single entity.
----@param name string The name of the event
 ---@return Event event the newly created event
-local function event(name)
+local function event()
     return setmetatable({
-        callbacks = {},
         terms = {},
         exclusions = {}
     }, event_mt)
@@ -56,7 +54,7 @@ end
 ---@param exclude? string A comma separated string of component names to exclude
 ---@param callback any
 local function on(event, terms, exclude, callback)
-    add(event.terms, terms)
-    add(event.exclusions, callback and exclude)
-    add(event.callbacks, callback or exclude)
+    add(event.terms, split(terms))
+    add(event.exclusions, split(callback and exclude))
+    add(event, callback or exclude)
 end
