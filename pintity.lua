@@ -38,23 +38,36 @@ pint_mt = {}
 
 relationship_mt = {}
 
--- Used to add a new component
-function pint_mt:__newindex(name, value)
-    if relationships[name] then
-        value = setmetatable({}, {
+local function create_relationship(entity, name)
+    return setmetatable({}, {
             __newindex = function(relationship, target, value)
-                update_archetype(self, relationship, nil, target)
+                update_archetype(entity, relationship, nil, target)
                 rawset(relationship, target, value)
             end,
             -- Used to delete a target from the relationship
             -- Unlike the entity's `__call` this one requires that a name be passed in
             __call = function(relationship, target)
-                update_archetype(self, nil, name, target)
+                update_archetype(entity, nil, name, target)
                 rawset(relationship, target, nil)
             end
         })
-    elseif components[name] then
+end
+
+-- Used primarily to access unassigned relationships and add them
+function pint_mt:__index(name)
+    if relationships[name] then
+        -- This is done to make relationship-target access syntax more consistent
+        return rawset(self, name, create_relationship(self, name))
+    end
+end
+
+-- Used to add a new component
+function pint_mt:__newindex(name, value)
+    if components[name] then
         update_archetype(self, name)
+    elseif relationships[name] then
+        -- Used for single-target relationships like `parent`
+        update_archetype(self, name, nil, value)
     end
     rawset(self, name, value)
 end
@@ -64,8 +77,10 @@ end
 function pint_mt:__call(name)
     if name then
         -- Remove just one component
-        update_archetype(self, nil, name)
+        -- Checks for single-target relationship
+        update_archetype(self, nil, name, relationships[name] and self[name])
         -- Used to prevent tags from being re-added
+        -- And to ensure __newindex is called
         rawset(self, name, nil)
     else
         -- Remove self from archetype
@@ -82,11 +97,30 @@ function entity()
     )
 end
 
--- Removes the entity at row and swaps it with the last entity
+--- Removes the entity at row and swaps it with the last entity
 function swap_remove_entity(archetype, row)
     archetype[row] = archetype[#archetype]
     archetype[row]._row = row
     deli(archetype)
+end
+
+--- Sets the value of a relationship target, or creates it
+local function set_target(table, name, target, value)
+    local relationship = table[name]
+    if relationship then
+        relationship[target] = value
+    else
+        table[name] = {[target] = value}
+    end
+end
+
+--- Removes the relationship target from a table
+--- If the relationship ends up empty then it is removed from the table entirely
+--- Assumes that the specified relationship and target already exists within the table
+local function remove_target(table, name, target)
+    local relationship = table[name]
+    relationship[target] = nil
+    if not next(relationship) then table[name] = nil end
 end
 
 function add_graph_edges(lesser_arch, greater_arch, with, without, target)
@@ -94,45 +128,45 @@ function add_graph_edges(lesser_arch, greater_arch, with, without, target)
         lesser_arch, greater_arch, with = greater_arch, lesser_arch, without
     end
     if target then
-        local relationship = greater_arch[with]
-        if relationship then relationship[target] = lesser_arch else greater_arch[with] = {[target] = lesser_arch} end
-        lesser_arch._with[with][target] = greater_arch
-        if relationship then relationship[target] = greater_arch else lesser_arch[with] = {[target] = greater_arch} end
+        set_target(greater_arch, with, target, lesser_arch)
+        set_target(lesser_arch._with, with, target, greater_arch)
     else
         greater_arch[with] = lesser_arch
         lesser_arch._with[with] = greater_arch
     end
 end
 
+--- Returns an iterator beginning at the first key of the table
+--- This function can be thought of as the complement of `ipairs`
 local function kpairs(table)
     return next, table, #table > 0 and #table or nil
+end
+
+local function copy_component_edges(from, to)
+    for component, relationship in kpairs(from) do
+        if relationships[component] then
+            local target_set = {}
+            for target in next, relationship do
+                target_set[target] = true
+            end
+            to[component] = target_set
+        else
+            to[component] = true
+        end
+    end
 end
 
 -- Creates a set representing the archetype with or without the specified component or target
 local function offset_archetype(arch, with, without, target)
     local component_set = {}
     -- Copy component/relationship-target set from archetype
-    for component, relationship in kpairs(arch) do
-        -- Important: we also need to create a copy of the target set so we don't overwrite the actual relationship record
-        if relationships[component] then
-            local target_set = {}
-            for target in next, relationship do
-                target_set[target] = true
-            end
-            component_set[component] = target_set
-        else
-            component_set[component] = true
-        end
-    end
+    copy_component_edges(arch, component_set)
     -- Modify set to reflect the desired target archetype
     if target then
         if with then
-            local relationship = component_set[with]
-            if relationship then relationship[target] = true else component_set[with] = {[target] = true} end
+            set_target(component_set, with, target, true)
         else
-            local relationship = component_set[without]
-            relationship[target] = nil
-            if not next(relationship) then component_set[without] = nil end
+            remove_target(component_set, without, target)
         end
     else
         if with then
@@ -144,21 +178,10 @@ local function offset_archetype(arch, with, without, target)
     return component_set
 end
 
--- Checks that an archetype is equal to a certain set of components and relationships
-local function arch_eq(offset, arch)
-    -- Match component set on other archetype
+--- Checks that the archetype is a subset of `subset`
+local function arch_subset(subset, arch)
     for component, relationship in kpairs(arch) do
-        local entry = offset[component]
-        if not entry then return false end
-        if relationships[component] then
-            for target in next, relationship do
-                if not entry[target] then return false end
-            end
-        end
-    end
-    -- Match archetype on component set in case any fields were missed
-    for component, relationship in kpairs(offset) do
-        local entry = arch[component]
+        local entry = subset[component]
         if not entry then return false end
         if relationships[component] then
             for target in next, relationship do
@@ -177,7 +200,7 @@ function exact_match_archetype(arch, ...)
     local offset = offset_archetype(arch, ...)
     for other in all(archetypes) do
         -- Check that the other archetype has all the components of this archetype
-        if arch_eq(offset, other) then
+        if arch_subset(offset, other) and arch_subset(other, offset) then
             add_graph_edges(arch, other, ...)
             return other
         end
@@ -197,8 +220,6 @@ end
 ---@param without? string The name of the component to remove
 ---@param target? any The target if with|without is a relationship
 function update_archetype(entity, with, without, target)
-    -- TODO: figure out what to do when a new relationship is added
-    -- That will probably just be handled within entity's __newindex
     local old = entity.archetype
     local new = get_edge(old._with, with, target) or get_edge(old, without, target) or
     exact_match_archetype(old, with, without, target)
@@ -212,24 +233,10 @@ function update_archetype(entity, with, without, target)
         -- Create new archetype from old's entity and add it
         new = { entity, _with = {} }
         -- Ensure that new has all of old's components (except for without)
-        for component_name, targets in kpairs(old) do
-            -- Ensure that when old's component is a relationship that its targets are also added to new
-            if relationships[component_name] then
-                local relationship = {}
-                for target in all(relationship) do
-                    relationship[target] = true
-                end
-                new[component_name] = relationship
-            else
-                new[component_name] = true
-            end
-        end
+        copy_component_edges(old, new)
         if without then
             if target then
-                new[without][target] = nil
-                if not next(new[without]) then
-                    new[without] = nil
-                end
+                remove_target(new, without, target)
             else
                 new[without] = nil
             end
@@ -300,7 +307,7 @@ end
 ---Example: `OnUpdate, OnDraw = phase(), phase()`
 ---@return Phase
 local function phase()
-    return add(phases, { systems = {} })
+    return { systems = {} }
 end
 
 --- Automatically updates all phases. Must be called in `_update` before any `progress` is called.
