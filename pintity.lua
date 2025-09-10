@@ -108,8 +108,8 @@ local function kpairs(table)
     return next, table, #table > 0 and #table or nil
 end
 
--- Checks that an archetype is equal to another give or take certain components
-function arch_eq(arch, other, with, without, target)
+-- Creates a set representing the archetype with or without the specified component or target
+local function offset_archetype(arch, with, without, target)
     local component_set = {}
     -- Copy component/relationship-target set from archetype
     for component, relationship in kpairs(arch) do
@@ -141,9 +141,24 @@ function arch_eq(arch, other, with, without, target)
             component_set[without] = nil
         end
     end
+    return component_set
+end
+
+-- Checks that an archetype is equal to a certain set of components and relationships
+local function arch_eq(offset, arch)
     -- Match component set on other archetype
-    for component, relationship in kpairs(other) do
-        local entry = component_set[component]
+    for component, relationship in kpairs(arch) do
+        local entry = offset[component]
+        if not entry then return false end
+        if relationships[component] then
+            for target in next, relationship do
+                if not entry[target] then return false end
+            end
+        end
+    end
+    -- Match archetype on component set in case any fields were missed
+    for component, relationship in kpairs(offset) do
+        local entry = arch[component]
         if not entry then return false end
         if relationships[component] then
             for target in next, relationship do
@@ -159,9 +174,10 @@ end
 ---@param ...? string Both `with`, `without`, and `target`. Replaced with `...` to save tokens.
 -- Maybe put arch in it as well. Will need to change each function that receives it.
 function exact_match_archetype(arch, ...)
+    local offset = offset_archetype(arch, ...)
     for other in all(archetypes) do
         -- Check that the other archetype has all the components of this archetype
-        if arch_eq(arch, other, ...) then
+        if arch_eq(offset, other) then
             add_graph_edges(arch, other, ...)
             return other
         end
