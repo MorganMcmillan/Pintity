@@ -1,24 +1,5 @@
 -- This is a concept for more complex queries. This likely won't be needed for any Pico-8 game, but can be emulated within systems.
 
-local function term_identity(term, archetype)
-    return archetype[term]
-end
-
-local function term_not(term, archetype)
-    return not archetype[term]
-end
-
---- Somehow I feel that these functions should have more responsibility over how queries are managed.
-local function term_optional()
-    return true
-end
-
-local function term_variable()
-    -- TODO: figure out how queries are going to even manage variables
-    -- I should probably think about how a query even matches with archetypes
-    return true
-end
-
 --- Returns query terms as a parsed list of expressions
 local function parse_terms(terms)
     local query = {}
@@ -61,12 +42,4 @@ local function query_matches_archetype(query, archetype)
         end
     end
     return true
-end
-
-function update_query(query, tables)
-    for archetype in all(tables or query_cache) do
-        if query_matches_archetype(query, archetype) then
-            add(query, archetype)
-        end
-    end
 end

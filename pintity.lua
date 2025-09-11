@@ -4,10 +4,12 @@
 --- Type definitions:
 --- @alias Entity { archetype: Archetype, _row: integer } An object containing arbitrary data
 --- @alias Component string The name of a component
---- @alias Relationship string The name of a component
+--- @alias Relationship string The name of a relationship
 --- @alias System fun(entities: Entity[]) -> skip?: boolean
 --- @alias Phase { [integer]: Query, systems: System[] }
---- @alias Query { terms: Component[], exclude: Component[], [integer]: Archetype }
+--- @alias Term fun(...) A closure that dictates the evaluation of a query
+--- @alias Match string | { first: string, second: any }
+--- @alias Query { [integer]: Term, matches: { [Archetype]: Match[] } }
 --- @alias Archetype { [integer]: Entity, [Component]: Archetype, _with: { [Component]: Archetype } }
 
 --- @type Archetype
@@ -102,6 +104,13 @@ function swap_remove_entity(archetype, row)
     archetype[row] = archetype[#archetype]
     archetype[row]._row = row
     deli(archetype)
+end
+
+--- Gets the value of a relationship target or component
+local function get_target(table, name, target)
+    local value = name and table[name]
+    if value and target then value = value[target] end
+    return value
 end
 
 --- Sets the value of a relationship target, or creates it
@@ -209,8 +218,7 @@ end
 
 -- Gets the component or relationship edge of an archetype and ensures that it points to another archetype.
 function get_edge(arch, with, target)
-    local edge = with and arch[with]
-    if target and edge then edge = edge[target] end
+    local edge = get_target(arch, with, target)
     if edge ~= true then return edge end
 end
 
@@ -266,37 +274,143 @@ local function relationship(names)
     end
 end
 
----Queries match entities with specific components.
----@param terms string A comma separated string of component names
----@param exclude? string A comma separated string of component names to exclude
----@return Archetype[] query Every archetype matched with the query
-local function query(terms, exclude)
-    return update_query({ terms = split(terms), exclude = split(exclude) }, archetypes)
+local function get_query_matches(archetype, results, query, matches)
+    local term = query[#results + 1]
+    if term then
+        term(archetype, results, query, matches)
+    else
+        add(matches, {unpack(results)})
+    end
+    -- Done for terms that add to the results table
+    deli(results)
 end
 
----Cached queries are queries that are updated at the start of every call to _update with `
----@param terms string A comma separated string of component names
----@param exclude? string A comma separated string of component names to exclude
+-- Parsers Subsection
+-- These are combinators used to parse query terms
+local function char(input, c)
+    if input[1] == c then return sub(input, 2), c end
+end
+
+local function parse_component(input)
+    -- Try wildcard
+    if char(input, '*') then
+        return function (arch, relationship, is_relationship)
+            
+        end
+    end
+    -- Parse variable
+    local name, is_var = char(input, '@')
+    input = name or input
+
+    -- Parse identifier
+    local i = 1
+    local c = ord(input)
+    -- C is between 'a' and 'z' or c is an underscore
+    while c >= 97 and c <= 122 or c == 95 do
+        i += 1
+        c = ord(input, i)
+    end
+
+    input, name = sub(input, i + 1), sub(input, 1, i)
+    -- TODO: figure out how component evaluation functions are going to be composed
+    return is_var and
+    function (arch, relationship, is_relationship)
+        
+    end or
+    function (arch, relationship, is_relationship)
+        
+    end
+end
+
+--- Parses a component or pair with an optional source
+local function parse_component_w_source(input)
+    local input, component = parse_component(input)
+    input = char(input, '(')
+    if not input then return component end
+    local source, target = upack(split(input, ':'))
+    
+end
+
+local function parse_pair(input)
+    input = char(input, '(')
+    if input then
+        local relationship, target = unpack(split(input, ':'))
+        relationship, target = parse_component(relationship), parse_component(target)
+        return function (archetype)
+            -- Relationship is used to match all relationships on the archetype
+            -- Target is used to match all targets in the relationship
+            relationship(archetype, nil, target)
+        end
+    end
+end
+
+local function parse_term(input)
+    return parse_pair(input) or
+    parse_component_w_source(input)
+end
+
+--- Parses a comma separated string of terms into a list of closures that test if a term matches a query
+--- Terms are not allowed to contain any whitespace
+--- @param terms any
+local function parse_query(terms)
+    local closures = {}
+    for term in all(split(terms)) do
+        local operator, rest = term[1], sub(term, 2)
+        -- Note: I don't like how simple term parsing currently is.
+        -- I'm thinking that I could rewrite this through the lens of function composition.
+        -- Terms have 3 steps:
+        -- 1. Evaluate wildcard/variable constraints. For relationships this means
+        -- Negated term
+        if operator == '!' then
+            add(closures, function (arch, results, ...)
+                if arch[rest] then return end
+                add(results, rest)
+                get_query_matches(arch, results, ...)
+            end)
+        -- Optional term
+        elseif operator == '?' then
+            add(closures, function (arch, results, ...)
+                add(results, arch[rest] and rest or false)
+                get_query_matches(arch, results, ...)
+            end)
+        -- Regular term
+        else
+            add(closures, function (arch, results, ...)
+                if arch[term] then
+                    add(results, term)
+                    get_query_matches(arch, results, ...)
+                end
+            end)
+        end
+    end
+end
+
+---Queries match entities with specific components.
+---@param terms string A comma separated string of query terms
 ---@return Archetype[] query Every archetype matched with the query
-local function cached_query(terms, exclude)
-    return add(cached_queries, query(terms, exclude))
+local function query(terms)
+    return update_query(parse_query(terms), archetypes)
+end
+
+---Cached queries are queries that are updated at the start of every call to `_update`
+---@param terms string A comma separated string of query terms
+---@return Archetype[] query Every archetype matched with the query
+local function cached_query(terms)
+    return add(cached_queries, query(terms))
 end
 
 --- Updates the contents of the query to represent the current state of the ECS.\
 --- Adds new archetypes after they are created
 ---@param query Query
----@param tables Archetype[]
+---@param tables? Archetype[] defaults to query_cache
 ---@return Query query
 function update_query(query, tables)
     for archetype in all(tables or query_cache) do
-        for term in all(query.terms) do
-            if not archetype[term] then goto ecs_query_match_failed end
+        local matches = {}
+        get_query_matches(archetype, query, {}, matches)
+        if #matches > 0 then
+            query.matches[archetype] = matches
         end
-        for exclude_term in all(query.exclude) do
-            if archetype[exclude_term] then goto ecs_query_match_failed end
-        end
-        add(query, archetype)
-        ::ecs_query_match_failed::
     end
     return query
 end
