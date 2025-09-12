@@ -99,6 +99,22 @@ function entity()
     )
 end
 
+---Registers a new component name(s).
+---@param names string A comma separated string of component names
+local function component(names)
+    for name in all(split(names)) do
+        components[name] = true
+    end
+end
+
+---Registers a new relationship name(s).
+---@param names string A comma separated string of relationship names
+local function relationship(names)
+    for name in all(split(names)) do
+        relationships[name] = true
+    end
+end
+
 --- Removes the entity at row and swaps it with the last entity
 function swap_remove_entity(archetype, row)
     archetype[row] = archetype[#archetype]
@@ -258,22 +274,6 @@ function update_archetype(entity, with, without, target)
     entity._row = #new
 end
 
----Registers a new component name(s).
----@param names string A comma separated string of component names
-local function component(names)
-    for name in all(split(names)) do
-        components[name] = true
-    end
-end
-
----Registers a new relationship name(s).
----@param names string A comma separated string of relationship names
-local function relationship(names)
-    for name in all(split(names)) do
-        relationships[name] = true
-    end
-end
-
 local function get_query_matches(archetype, results, query, matches)
     local term = query[#results + 1]
     if term then
@@ -285,68 +285,21 @@ local function get_query_matches(archetype, results, query, matches)
     deli(results)
 end
 
--- Parsers Subsection
--- These are combinators used to parse query terms
 local function char(input, c)
     if input[1] == c then return sub(input, 2), c end
 end
 
-local function parse_component(input)
-    -- Try wildcard
-    if char(input, '*') then
-        return function (arch, relationship, is_relationship)
-            
-        end
-    end
-    -- Parse variable
-    local name, is_var = char(input, '@')
-    input = name or input
-
-    -- Parse identifier
-    local i = 1
-    local c = ord(input)
-    -- C is between 'a' and 'z' or c is an underscore
-    while c >= 97 and c <= 122 or c == 95 do
-        i += 1
-        c = ord(input, i)
-    end
-
-    input, name = sub(input, i + 1), sub(input, 1, i)
-    -- TODO: figure out how component evaluation functions are going to be composed
-    return is_var and
-    function (arch, relationship, is_relationship)
-        
-    end or
-    function (arch, relationship, is_relationship)
-        
-    end
-end
-
---- Parses a component or pair with an optional source
-local function parse_component_w_source(input)
-    local input, component = parse_component(input)
-    input = char(input, '(')
-    if not input then return component end
-    local source, target = upack(split(input, ':'))
-    
-end
-
-local function parse_pair(input)
-    input = char(input, '(')
-    if input then
-        local relationship, target = unpack(split(input, ':'))
-        relationship, target = parse_component(relationship), parse_component(target)
-        return function (archetype)
-            -- Relationship is used to match all relationships on the archetype
-            -- Target is used to match all targets in the relationship
-            relationship(archetype, nil, target)
-        end
-    end
-end
-
 local function parse_term(input)
-    return parse_pair(input) or
-    parse_component_w_source(input)
+    if input[1] == '(' then
+        local relationship, target = unpack(split(sub(input, 2), ':'))
+        return function (arch)
+            local rel = arch[relationship]
+            return rel and rel[target]
+        end
+    end
+    return function (arch)
+        return arch[input]
+    end
 end
 
 --- Parses a comma separated string of terms into a list of closures that test if a term matches a query
@@ -356,28 +309,27 @@ local function parse_query(terms)
     local closures = {}
     for term in all(split(terms)) do
         local operator, rest = term[1], sub(term, 2)
-        -- Note: I don't like how simple term parsing currently is.
-        -- I'm thinking that I could rewrite this through the lens of function composition.
-        -- Terms have 3 steps:
-        -- 1. Evaluate wildcard/variable constraints. For relationships this means
-        -- Negated term
         if operator == '!' then
+            term = parse_term(rest)
             add(closures, function (arch, results, ...)
-                if arch[rest] then return end
-                add(results, rest)
-                get_query_matches(arch, results, ...)
+                if not term(arch) then
+                    add(results, true)
+                    get_query_matches(arch, results, ...)
+                end
             end)
-        -- Optional term
         elseif operator == '?' then
+            term = parse_term(rest)
             add(closures, function (arch, results, ...)
-                add(results, arch[rest] and rest or false)
+                local result = term(arch)
+                add(results, result or false)
                 get_query_matches(arch, results, ...)
             end)
-        -- Regular term
         else
+            term = parse_term(term)
             add(closures, function (arch, results, ...)
-                if arch[term] then
-                    add(results, term)
+                local result = term(arch)
+                if result then
+                    add(results, result)
                     get_query_matches(arch, results, ...)
                 end
             end)

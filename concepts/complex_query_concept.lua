@@ -1,45 +1,85 @@
--- This is a concept for more complex queries. This likely won't be needed for any Pico-8 game, but can be emulated within systems.
+-- Parsers Subsection
+-- These are combinators used to parse query terms
+local function char(input, c)
+    if input[1] == c then return sub(input, 2), c end
+end
 
---- Returns query terms as a parsed list of expressions
-local function parse_terms(terms)
-    local query = {}
-    for i, term in inext, split(terms) do
-        local operator, rest = term[1], split(sub(term, 2), '|')
-        if operator == '!' then
-            query[i] = { operator = term_not, term = rest}
-        elseif operator == '?' then
-            query[i] = { operator = term_optional, term = rest }
-        elseif operator == '@' then
-            query = { operator = term_variable, term = {sub(term, 2)} }
-        else
-            query[i] = { operator = term_identity, term = split(term, '|') }
+local function evaluate_wildcard(archetype, relationship, is_relationship)
+    local wildcard = {}
+    if is_relationship then
+        for component in kpairs(archetype) do
+            if relationships[component] then
+                add(wildcard, component)
+            end
+        end
+    elseif relationship then
+        for target in kpairs(relationship) do
+            add(wildcard, target)
+        end
+    else
+        for component in kpairs(archetype) do
+            if components[component] then
+                add(wildcard, component)
+            end
+        end
+    end
+    return wildcard
+end    
+
+local function parse_component(input)
+    -- Try wildcard
+    if char(input, '*') then
+        return function (arch, relationship, is_relationship)
+            
+        end
+    end
+    -- Parse variable
+    local name, is_var = char(input, '@')
+    input = name or input
+
+    -- Parse identifier
+    local i = 1
+    local c = ord(input)
+    -- C is between 'a' and 'z' or c is an underscore
+    while c >= 97 and c <= 122 or c == 95 do
+        i += 1
+        c = ord(input, i)
+    end
+
+    input, name = sub(input, i + 1), sub(input, 1, i)
+    -- TODO: figure out how component evaluation functions are going to be composed
+    return is_var and
+    function (arch, relationship, is_relationship)
+        
+    end or
+    function (arch, relationship, is_relationship)
+        
+    end
+end
+
+--- Parses a component or pair with an optional source
+local function parse_component_w_source(input)
+    local input, component = parse_component(input)
+    input = char(input, '(')
+    if not input then return component end
+    local source, target = upack(split(input, ':'))
+    
+end
+
+local function parse_pair(input)
+    input = char(input, '(')
+    if input then
+        local relationship, target = unpack(split(input, ':'))
+        relationship, target = parse_component(relationship), parse_component(target)
+        return function (archetype)
+            -- Relationship is used to match all relationships on the archetype
+            -- Target is used to match all targets in the relationship
+            relationship(archetype, nil, target)
         end
     end
 end
 
---- Like the old query function, except this version uses a proper syntax:
---- Normal term: "name" a plain component name
---- Exlcuded term: "!name"
---- Optional term: "?name" normally would be a no-op, but I'm thinking of adding query information to systems
---- Or terms: "foo|bar|baz" these form a group of components that can either match. Technically every term is an or term with just one component in the group
---- Pair term: "(likes:apples)" based on Flecs' relationships. Uses ':' instead of ',' because of `split`
---- Variable: "@var" creates a new query variable who's value is the component it matches on.
---- Variables are used to restrict the set of results a wildcard returns, so "(likes:@var),(eats:@var)" returns only the strict subset of things this entity both likes and eats
---- Equality: "@var==foo|bar|baz"
---- Negated equality: "@var!=foo|bar|baz"
-local function query(terms)
-    update_query({terms = parse_terms(terms)}, archetypes)
-end
-
---- Tests whether or not a query matches a specific archetype.
----@param query Query
----@param archetype Archetype
----@return boolean match if the query matches.
-local function query_matches_archetype(query, archetype)
-    for term in all(query.terms) do
-        for or_term in all(term.term) do
-            if not term.operator(or_term) then return false end
-        end
-    end
-    return true
+local function parse_term(input)
+    return parse_pair(input) or
+    parse_component_w_source(input)
 end
