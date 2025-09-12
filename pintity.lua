@@ -294,7 +294,7 @@ local function parse_term(input)
         local relationship, target = unpack(split(sub(input, 2), ':'))
         return function (arch)
             local rel = arch[relationship]
-            return rel and rel[target]
+            return rel and rel[target] and { first = relationship, second = target }
         end
     end
     return function (arch)
