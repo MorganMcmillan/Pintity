@@ -194,11 +194,7 @@ local function offset_archetype(arch, with, without, target)
             remove_target(component_set, without, target)
         end
     else
-        if with then
-            component_set[with] = true
-        else
-            component_set[without] = nil
-        end
+        component_set[with or without] = with
     end
     return component_set
 end
