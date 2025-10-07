@@ -1,21 +1,21 @@
 -- Pintity: a stupid simple ECS for Pico-8
 -- By Morgan.
 
--- 404 tokens compressed
+-- 370 tokens compressed
 -- 329 tokens less than 1.0.0 (733 tokens)
 
 --- Type definitions:
---- @alias Entity { components: ComponentSet, archetype: Archetype, row: integer } An object containing arbitrary data
+--- @alias Entity { archetype: Archetype, row: integer } An object containing arbitrary data
 --- @alias Component integer a singular bit identifying a component
 --- @alias ComponentSet integer bitset of components
 --- @alias System fun(entities: Entity[]) -> skip?: boolean
 --- @alias Phase { [integer]: Query, systems: System[] }
 --- @alias Query { terms: Component[], bits: ComponentSet, exclude: ComponentSet, [integer]: any[] }
---- @alias Archetype Entity[]
+--- @alias Archetype { [integer]: Entity, components: ComponentSet }
 
 --- @type Archetype
 --- The archetype containing no components. Used for recycling.
-arch0 = {}
+arch0 = {components = 0}
 
 --- @type { ComponentSet: Archetype }
 archetypes = {[0] = arch0}
@@ -39,23 +39,13 @@ components = {}
 --- @type Phase[]
 phases = {}
 
---- @type Entity[]
-deferred_moves = {}
-
 pint_mt = {}
-
--- Defers an entity for an archetype move.
--- Used to prevent systems from matching the same entity twice.
-function defer(entity)
-    if entity.unenqueued then add(deferred_moves, entity).unenqueued = false end
-end
 
 -- Used to add a new component
 function pint_mt:__newindex(name, value)
     local bit = components[name]
     if bit then
-        self.components |= bit
-        defer(self)
+        update_archetype(self, bit)
     end
     rawset(self, name, value)
 end
@@ -64,14 +54,11 @@ end
 -- If name is not given, then the entity is deleted.
 function pint_mt:__call(name)
     if name then
-        -- Remove just one component
-        self.components ^^= components[name]
-        defer(self)
-        -- Used to prevent tags from being re-added
+        update_archetype(self, nil, components[name])
         rawset(self, name, nil)
     else
         -- Remove self from archetype
-        swap_remove_entity(self.archetype, self.row)
+        swap_remove_entity(self)
     end
 end
 
@@ -79,16 +66,37 @@ end
 ---@return Entity
 function entity()
     return setmetatable(
-        add(arch0, { archetype = arch0, components = 0, row = #arch0 + 1, unenqueued = true }),
+        add(arch0, { archetype = arch0, row = #arch0 + 1 }),
         pint_mt
     )
 end
 
 -- Removes the entity at row swaps it with the last entity
-function swap_remove_entity(archetype, row)
+function swap_remove_entity(entity)
+    local archetype, row = entity.archetype, entity.row
     archetype[row] = archetype[#archetype]
     archetype[row].row = row
     deli(archetype)
+end
+
+---Changes the archetype of an entity.
+function update_archetype(entity, with, without)
+    local old = entity.archetype.components
+    local new = archetypes[with and old | with or old ^ without]
+
+    -- Invariant if the last entity is this one
+    swap_remove_entity(entity)
+    if new then
+        -- Move entity from old archetype to new
+        add(new, entity)
+    else
+        -- Create new archetype from old's entity and add it
+        new = {entity}
+
+        archetypes[components], query_cache[components] = new, new
+    end
+    entity.archetype = new
+    entity.row = #new
 end
 
 ---Creates a new component identifier.\
@@ -138,15 +146,6 @@ function update_query(query, tables)
     return query
 end
 
----Creates a new phase. Systems can be added to phases.\
----Phases are run using `progress`.\
----All phases must be updated using `update_phases()` in `_update` before `progress` is called.\
----Example: `OnUpdate, OnDraw = phase(), phase()`
----@return Phase
-local function phase()
-    return add(phases, { systems = {} })
-end
-
 --- Automatically updates all phases. Must be called in `_update` before any `progress` is called.
 function update_phases()
     if next(query_cache) then
@@ -172,28 +171,6 @@ end
 ---Runs all systems that are part of `phase`
 ---@param phase Phase the current phase to run.
 function progress(phase)
-    -- Sync entity archetypes
-    for entity in all(deferred_moves) do
-        local components = entity.components
-        local new = archetypes[components]
-
-        -- Invariant if the last entity is this one
-        swap_remove_entity(entity.archetype, entity.row)
-        if new then
-            -- Move entity from old archetype to new
-            add(new, entity)
-        else
-            -- Create new archetype from old's entity and add it
-            new = {entity}
-
-            archetypes[components], query_cache[components] = new, new
-        end
-        entity.archetype = new
-        entity.row = #new
-        entity.unenqueued = true
-    end
-    deferred_moves = {}
-
     -- Run systems for entities
     for i, query in inext, phase do
         local system = phase.systems[i]
