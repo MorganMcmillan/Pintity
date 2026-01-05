@@ -16,21 +16,13 @@
 --- The archetype containing no components. Used for recycling.
 arch0 = { _with = {} }
 
---- @type Archetype[]
-archetypes = { arch0 }
-
 --- @type Query[]
 cached_queries = {}
 
---- @type Archetype[]
---- New archetypes created this frame to update queries by.\
---- Prevents system queries from adding archetypes twice.
-query_cache = {}
-
---- @type { Component: true }
+--- @type { Component: Archetype[] }
 components = {}
 
---- @type { Relationship: true }
+--- @type { Relationship: { any: Archetype[] } }
 relationships = {}
 
 --- @type Phase[]
@@ -87,6 +79,7 @@ function pint_mt:__call(name)
     else
         -- Remove self from archetype
         swap_remove_entity(self.archetype, self._row)
+        -- TODO: code for entity deletion
     end
 end
 
@@ -103,7 +96,7 @@ end
 ---@param names string A comma separated string of component names
 local function component(names)
     for name in all(split(names)) do
-        components[name] = true
+        components[name] = {}
     end
 end
 
@@ -111,7 +104,7 @@ end
 ---@param names string A comma separated string of relationship names
 local function relationship(names)
     for name in all(split(names)) do
-        relationships[name] = true
+        relationships[name] = {}
     end
 end
 
@@ -264,7 +257,19 @@ function update_archetype(entity, with, without, target)
         -- Manage graph. This will also add `with` to the new archetype
         add_graph_edges(old, new, with, without, target)
 
-        add(archetypes, add(query_cache, new))
+        -- Add archetype to it's component/relationship records
+        for k, targets in kpairs(new) do
+            local rel_targets = relationships[k]
+            if rel_targets then
+                for target in next, targets do
+                    local record = rel_targets[target] or {}
+                    add(record, new)
+                    rel_targets[target] = record
+                end
+            elseif k ~= "_with" then
+                add(components[k], new)
+            end
+        end
     end
     entity.archetype = new
     entity._row = #new
@@ -279,6 +284,13 @@ local function get_query_matches(archetype, results, query, matches)
     end
     -- Done for terms that add to the results table
     deli(results)
+end
+
+local function on_entity_delete(entity)
+    for _, rel in next, relationships do
+        local arch = rel[entity]
+        if arch then delete_arch(arch) end
+    end
 end
 
 local function char(input, c)
